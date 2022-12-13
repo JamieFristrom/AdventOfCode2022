@@ -7,7 +7,7 @@ struct Tree {
 
 // this data representation allows for some elegant functional stuff, we don't have to crawl the map
 // unfortunately it's n^2 but it doesn't matter whether this code is slow or not
-// (It is so slow it took the program about a second to run on my laptop, though!)
+// (It is so slow it took the program about a second to run on my laptop,)
 type Forest = Vec<Tree>;
 
 fn process_data(data: &str) -> Forest {
@@ -19,6 +19,50 @@ fn process_data(data: &str) -> Forest {
     }
 
     forest
+}
+
+fn map_the_forest(forest: &Forest) -> Vec<Vec<i32>> {
+    let mut map: Vec<Vec<i32>> = vec![];
+    
+    let x_bound = forest.iter().max_by(|tree0,tree1| tree0.x.cmp(&tree1.x)).unwrap().x+1;
+
+    let y_bound = forest.iter().max_by(|tree0,tree1| tree0.y.cmp(&tree1.y)).unwrap().y+1;
+    map.resize(y_bound, vec![-1; x_bound]);
+    for tree in forest {
+        map[tree.y][tree.x] = tree.height;
+    }
+    
+    map
+}
+
+// but this is _really_ slow. should have gone iterative?
+fn travel_until(map: &Vec<Vec<i32>>, x: i32, y: i32, dx: i32, dy: i32, target_height: i32) -> i32 {
+    let x = x+dx;
+    let y = y+dy;
+    if y<0 || x<0 || y>=map.len().try_into().unwrap() || x>=map[y as usize].len().try_into().unwrap() { return 0; }
+    if map[y as usize][x as usize]>=target_height { return 1; }
+    
+    travel_until(map, x, y, dx, dy, target_height)+1
+}
+
+fn get_scenic_score(map: &Vec<Vec<i32>>, x: usize, y: usize) -> i32 {
+    let target_height = map[y][x];
+    let sx: i32 = x.try_into().unwrap();
+    let sy: i32 = y.try_into().unwrap(); 
+
+    travel_until(map, sx, sy, -1, 0, target_height) * travel_until(map, sx, sy, 1, 0, target_height)
+        * travel_until(map, sx, sy, 0, -1, target_height) * travel_until(map, sx, sy, 0, 1, target_height)
+}
+
+fn best_scenic_score(map: &Vec<Vec<i32>>) -> i32 {
+    let mut best_score = -1;
+    for y in 0..map.len() {
+        for x in 0..map[y].len() {
+            best_score = std::cmp::max(best_score, get_scenic_score(map, x, y));
+        }
+    }
+
+    best_score
 }
 
 // I don't get why this has to be &&
@@ -170,22 +214,37 @@ fn main() {
 001202021022233123031004403230031341512221513345352553531452554321113401010231031311031210320110120";
     let forest = process_data(puzzle_input);
     println!("Answer: {}", total_visible_trees(&forest));
+    let map = map_the_forest(&forest);
+    let best_score = best_scenic_score(&map);
+    println!("Part 2 answer: {}", best_score);
 }
 
-// #[test]
-// fn sample_data() {
-//     let sample_data = 
-// "30373
-// 25512
-// 65332
-// 33549
-// 35390";
-//     let forest = process_data(&sample_data);
-//     assert_eq!(3, forest[0][0]);
-//     assert_eq!(0, forest[0][1]);
-//     assert_eq!(2, forest[1][0]);
-//     assert_eq!(0, forest[4][4]);
-// }
+#[test]
+fn most_scenic_tree_dude_test() {
+    let sample_data = 
+"30373
+25512
+65332
+33549
+35390";
+    let forest = process_data(&sample_data);
+    let map = map_the_forest(&forest);
+    assert_eq!(4, get_scenic_score(&map, 2, 1));
+    assert_eq!(8, get_scenic_score(&map, 2, 3));
+    assert_eq!(8, best_scenic_score(&map));
+}
+
+#[test]
+fn map_the_forest_test() {
+    let forest = vec![Tree {x:0, y:0, height:1}, Tree {x:1,y:0,height:2}, Tree {x:0, y:1, height:3}, Tree {x:1, y:1, height:4}, Tree {x:0, y:2, height:5}, Tree {x:1,y:2, height:6}];
+    let map = map_the_forest(&forest);
+    assert_eq!(3, map.len());
+    for row in &map {
+        assert_eq!(2, row.len());
+    }
+    let expected_map = vec![vec![1,2],vec![3,4],vec![5,6]];
+    assert_eq!(&expected_map, &map);
+}
 
 #[test]
 fn sample_data() {
