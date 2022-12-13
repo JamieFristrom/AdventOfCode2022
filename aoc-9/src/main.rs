@@ -18,7 +18,7 @@ fn do_the_thing(input: &str) -> usize {
 }
 
 fn follow_the_path(input: &str) -> Vec<(i64, i64)> {
-    let mut head_pos = (0,0);
+    let mut snake : Vec<(i64,i64)> = vec![(0,0);10];
     let mut tail_pos = (0,0);
     let mut visited : Vec<(i64, i64)> = vec![];
     visited.push(tail_pos);
@@ -34,13 +34,15 @@ fn follow_the_path(input: &str) -> Vec<(i64, i64)> {
         };
         let count = split.next().unwrap().parse::<i64>().unwrap();
         for _ in 0..count {
-            head_pos = addp(&head_pos, &dir);
-            let mut distance = subp(&head_pos, &tail_pos);
-            let mut delta = determine_delta(&distance);
-            tail_pos = addp(&tail_pos, &delta);
-            assert!(1 >= chess_distance(&subp(&head_pos, &tail_pos)));
-            assert!(0 <= chess_distance(&subp(&head_pos, &tail_pos)));
-            visited.push(tail_pos);
+            snake[0] = addp(&snake[0], &dir);
+            for i in 1..snake.len() {
+                let mut distance = subp(&snake[i-1], &snake[i]);
+                let mut delta = determine_delta(&distance);
+                snake[i] = addp(&snake[i], &delta);
+                assert!(1 >= chess_distance(&subp(&snake[i-1], &snake[i])));
+                assert!(0 <= chess_distance(&subp(&snake[i-1], &snake[i])));
+            }
+            visited.push(*snake.last().unwrap());
         }
     }
    visited.sort();
@@ -91,13 +93,26 @@ R 4
 D 1
 L 5
 R 2";
-    assert_eq!(13, do_the_thing(sample_input));
+    assert_eq!(1, do_the_thing(sample_input));
 }
 
 #[test]
+fn larger_example() {
+    let sample_input: &str =
+"R 5
+U 8
+L 8
+D 3
+R 17
+D 10
+L 25
+U 20";
+    assert_eq!(36, do_the_thing(sample_input));
+}
+#[test]
 fn nobody_said_it_was_a_single_character() {
     let sample_input: &str = "R 100";
-    assert_eq!(100, do_the_thing(sample_input));
+    assert_eq!(91, do_the_thing(sample_input));
 }
 
 fn puzzle_input() -> &'static str {
