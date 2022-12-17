@@ -205,72 +205,6 @@ fn test_simple_sitch() {
 }
 
 #[test]
-fn test_optimized_sitch() {  // when optimized, 3 becomes 2
-    let distances: Vec<Vec<usize>> = vec![vec![0,1,2,3],vec![1,0,1,2],vec![2,1,0,1],vec![3,2,1,0]];
-    let mut valves = vec![
-        Valve{flow:1u16,id:"A".to_string(), distances: HashMap::new(), bit: None},git
-        Valve{flow:3u16,id:"B".to_string(), distances: HashMap::new(), bit: None},
-        Valve{flow:0u16,id:"AA".to_string(), distances: HashMap::new(), bit: None},
-        Valve{flow:7u16,id:"D".to_string(), distances: HashMap::new(), bit: None}];
-    transcribe_distances_into_valves(&mut valves, &distances);
-    let toggles_size = 1 << valves.len();
-    // array of time * starting-point * time 
-    let mut answer_space = vec![vec![vec![0u16;valves.len()];toggles_size];10];
-    fill_out_time_n(&valves, &mut answer_space, 1);
-    assert_eq!(0, answer_space[0][0][0]);  // time, toggles, nodes
-    assert_eq!(0, answer_space[0][7][0]);
-    assert_eq!(0, answer_space[0][0][1]);
-    assert_eq!(0, answer_space[0][7][1]);
-    assert_eq!(0, answer_space[0][0][2]);
-    assert_eq!(0, answer_space[0][7][2]);
-    fill_out_time_n( &valves, &mut answer_space, 2);
-    assert_eq!(0, answer_space[1][0][0]);  // time, toggles, nodes
-    assert_eq!(0, answer_space[1][7][0]);
-    assert_eq!(0, answer_space[1][0][1]);
-    assert_eq!(0, answer_space[1][7][1]);
-    assert_eq!(0, answer_space[1][0][2]);
-    assert_eq!(0, answer_space[1][7][2]);
-    fill_out_time_n( &valves, &mut answer_space, 3);
-    assert_eq!(1, answer_space[2][0][0]);  // time, toggles, nodes
-    assert_eq!(0, answer_space[2][7][0]);
-    assert_eq!(3, answer_space[2][0][1]);
-    assert_eq!(0, answer_space[2][7][1]);
-    assert_eq!(7, answer_space[2][0][3]);
-    //assert_eq!(7, answer_space[2][7][3]);   // because last bit clear
-    //assert_eq!(0, answer_space[2][15][3]);
-    fill_out_time_n( &valves, &mut answer_space, 4);
-    assert_eq!(3, answer_space[3][0][0]);  // move to 1 and turn on
-    //assert_eq!(0, answer_space[3][15][0]);
-    assert_eq!(6, answer_space[3][0][1]);  // you don't have time to move to #3 and turn it on for 7 instead of 2x3
-    //assert_eq!(0, answer_space[3][15][1]);
-    assert_eq!(7, answer_space[3][0][2]);  
-    //assert_eq!(0, answer_space[3][15][2]);
-    assert_eq!(14, answer_space[3][0][3]);
-    //assert_eq!(0, answer_space[3][15][3]); 
-    fill_out_time_n( &valves, &mut answer_space, 5);
-    assert_eq!(6, answer_space[4][0][0]);  // move to 1 and turn on
-    //assert_eq!(0, answer_space[4][15][0]);
-    assert_eq!(10, answer_space[4][0][1]);  
-    //assert_eq!(0, answer_space[4][15][1]);
-    assert_eq!(14, answer_space[4][0][2]);  
-    //assert_eq!(0, answer_space[4][15][2]);    
-    assert_eq!(21, answer_space[4][4][3]); // if you start on 2 when it's already toggled, what can you do? MOve left and turn on for 2 units
-    assert_eq!(21, answer_space[4][0][3]);
-    //assert_eq!(0, answer_space[4][15][3]); 
-    fill_out_time_n( &valves, &mut answer_space, 6);
-    assert_eq!(10, answer_space[5][0][0]);  // I think turn on where you're at (4), step (6) is better than step (9) and step back (1)move to 1, turn on for 9, move to 2 and turn on for 7
-    //assert_eq!(0, answer_space[5][15][0]);
-    assert_eq!(19, answer_space[5][0][1]);  // turn on for 12, move to 3 and turn on for 7
-    //assert_eq!(0, answer_space[5][15][1]);
-    assert_eq!(21, answer_space[5][0][2]);  // move right, 3*7
-    //assert_eq!(0, answer_space[5][15][2]);    
-    assert_eq!(31, answer_space[5][0][3]);  // 4*7+3
-    //assert_eq!(0, answer_space[5][15][3]); 
-    //assert_eq!()
-    
-}
-
-#[test]
 fn test_sample_input() {
     let answer = do_the_thing(get_sample_input());
     assert_eq!(1651, answer);
@@ -348,11 +282,12 @@ fn transcribe_distances_into_valves(valves: &mut Vec<Valve>, distances: &Vec<Vec
     }
 }
 
-#[test]
-fn test_part_1() {
-    let answer = do_the_thing(get_puzzle_input());
-    assert_eq!(1638, answer);
-}
+// too slow to leave in test suite:
+// #[test]
+// fn test_part_1() {
+//     let answer = do_the_thing(get_puzzle_input());
+//     assert_eq!(1638, answer);
+// }
 
 #[test]
 fn test_parse_input() {
