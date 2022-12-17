@@ -1,5 +1,5 @@
 use scanf::sscanf;
-
+use std::{collections::HashMap, hash::Hash};
 use core::time;
 
 fn main() {
@@ -13,38 +13,50 @@ fn main() {
 // arbitrarily - time, toggles, nodes
 type AnswerSpace = Vec<Vec<Vec<u16>>>;
 
+struct Valve {
+    id: String,
+    flow: u16,
+    distances: HashMap<String,u16>
+}
+
 fn switch_enabled(bitset: usize, switch: usize) -> bool {
     (bitset & (1<<switch)) != 0
 }
 
 fn do_the_thing(input: &str) -> u16{
-    let (mut distances, mut flows) = parse_input(input);
-    trim_distances_and_flows(&mut distances, &mut flows);
-    let answer_space = evaluate(&distances, &flows, 30);
+    let (mut distances, mut valves) = parse_input(input);
+    //trim_distances_and_valves(&mut distances, &mut flows);
+    let answer_space = evaluate(&distances, &valves, 30);
 
-    answer_space[30][0][0]
+    let starting_valve_idx = get_important_valves(&valves).iter().position(|v| v.id=="AA").unwrap();
+    answer_space[30][0][starting_valve_idx]
 }
 
-fn fill_out_time_n(distances: &Vec<Vec<usize>>, flows: &Vec<u16>, answer_space: &mut AnswerSpace, time_left: u16) {
-    
+// can turn into a hashmap later if slow
+fn get_valve_for_toggle(valves: &Vec<Valve>, toggle_idx:usize) -> &Valve {
+    valves.iter().filter(|valve| valve.flow>0).nth(toggle_idx).unwrap()
+}
+
+fn fill_out_time_n(valves: &Vec<Valve>, answer_space: &mut AnswerSpace, time_left: u16) {
     // at time n, do we travel to another node and turn it on (getting the value for its time-distance entry
     // in the table) or do we turn on our current switch?
-    let toggles_size = 1 << flows.len();
-    for bitset in 0..toggles_size {
-        for (start_node_idx, start_node_flow) in flows.iter().enumerate() {
-            for (dest_node_idx, dest_node_flow) in flows.iter().enumerate() {
-                if !(switch_enabled(bitset, dest_node_idx)) {
+    let important_valves = get_important_valves(valves);
+    let toggle_flags_range = 1 << important_valves.len();
+    for bitset in 0..toggle_flags_range {
+        for (start_toggle_idx, start_node_flow) in important_valves.iter().enumerate() {
+            for (dest_toggle_idx, dest_node_flow) in important_valves.iter().enumerate() {
+                if !(switch_enabled(bitset, dest_toggle_idx)) {
                     // we get the value of traveling there + turning on, plus the value for starting there with it off
-                    let distance = distances[start_node_idx][dest_node_idx] as u16; 
+                    let distance = important_valves[start_toggle_idx].distances[&important_valves[dest_toggle_idx].id];
                     if distance<time_left-1 {  // example, distance 1, time_left 2: enough time to travel there, turn it on, but it doesn't fuel until next tick, and get no further value
-                        let turn_on_value = dest_node_flow * (time_left-1 as u16-distance);  // distance 1, time_left 2, 1 unit of flow
-                        let changed_bitset = bitset | (1<<dest_node_idx);
+                        let turn_on_value = dest_node_flow.flow * (time_left-1 as u16-distance);  // distance 1, time_left 2, 1 unit of flow
+                        let changed_bitset = bitset | (1<<dest_toggle_idx);
                         // -2 below: -1 for starting array indexing at 0, -1 for the time it took to throw the switch
-                        let node_value = answer_space[(time_left-distance-1) as usize][changed_bitset][dest_node_idx]; // time_left 2, distance 1, 0th index (which is all 0s)
+                        let node_value = answer_space[(time_left-distance-1) as usize][changed_bitset][dest_toggle_idx]; // time_left 2, distance 1, 0th index (which is all 0s)
                         let our_value = turn_on_value + node_value;
-                        if our_value > answer_space[time_left as usize][bitset][start_node_idx] {  
+                        if our_value > answer_space[time_left as usize][bitset][start_toggle_idx] {  
                             // hard to wrap my head around which bitset to use. this is the one where we haven't flipped it yet, because flipping it is one of the options we could take at this location at this time
-                            answer_space[time_left as usize][bitset][start_node_idx] = our_value;
+                            answer_space[time_left as usize][bitset][start_toggle_idx] = our_value;
                         }
                     }
                 }
@@ -53,73 +65,174 @@ fn fill_out_time_n(distances: &Vec<Vec<usize>>, flows: &Vec<u16>, answer_space: 
     }
 }
 
-fn evaluate(distances: &Vec<Vec<usize>>, flows: &Vec<u16>, time: usize)->AnswerSpace {
+fn get_important_valves(valves: &Vec<Valve>) -> Vec<&Valve> {
+    // optimized:
+    let important_valves: Vec<&Valve> = valves.iter().filter(|valve| valve.flow>0 || valve.id=="AA").collect();
+    // because you start here it's on the important list
+    // unoptimized:
+    //let important_valves = valves;
+    important_valves
+}
+
+fn evaluate(distances: &Vec<Vec<usize>>, valves: &Vec<Valve>, time: usize)->AnswerSpace {
     // allocate our mondo array
-    let toggles_size = 1 << flows.len();
     // array of time * starting-point * time 
-    let mut answer_space = vec![vec![vec![0u16;flows.len()];toggles_size];time+1];
+    let important_valves = get_important_valves(&valves);
+    
+    let toggles_size = 1 << important_valves.len();
+    
+    let mut answer_space = vec![vec![vec![0u16;important_valves.len()];toggles_size];time+1];
     // time left 0 is already filled with 0's - it is too late to accomplish anything, but I want a column in the array
     // to skip an if check
+    
     for i in 1..31 {
+        fill_out_time_n(valves, &mut answer_space, i);
+        
         println!("What to do when {i} time left");
-        fill_out_time_n(distances, flows, &mut answer_space, i);
+        for (j, valve) in important_valves.iter().enumerate() {
+            println!("{j} Valve {}/{}: best_flow {}", valve.id, valve.flow, answer_space[i as usize][0][j]);
+        }
     }
     // for tick in 1..time {
-    //     fill_out_time_n(distances, flows, &mut answer_space, tick);
+    //     fill_out_time_n(distances, valves, &mut answer_space, tick);
     // }
     answer_space
 }
 
 #[test]
 fn test_simple_sitch() {
-    let distances = vec![vec![0,1,2],vec![1,0,1],vec![2,1,0]];
-    let flows = vec![1u16,3u16,7u16];
-    let toggles_size = 1 << flows.len();
+    let distances: Vec<Vec<usize>> = vec![vec![0,1,2,3],vec![1,0,1,2],vec![2,1,0,1],vec![3,2,1,0]];
+    let mut valves = vec![
+        Valve{flow:1u16,id:"A".to_string(), distances: HashMap::new()},
+        Valve{flow:3u16,id:"B".to_string(), distances: HashMap::new()},
+        Valve{flow:0u16,id:"C".to_string(), distances: HashMap::new()},
+        Valve{flow:7u16,id:"D".to_string(), distances: HashMap::new()}];
+    transcribe_distances_into_valves(&mut valves, &distances);
+    let toggles_size = 1 << valves.len();
     // array of time * starting-point * time 
-    let mut answer_space = vec![vec![vec![0u16;flows.len()];toggles_size];10];
-    fill_out_time_n(&distances, &flows, &mut answer_space, 1);
+    let mut answer_space = vec![vec![vec![0u16;valves.len()];toggles_size];10];
+    fill_out_time_n(&valves, &mut answer_space, 1);
     assert_eq!(0, answer_space[0][0][0]);  // time, toggles, nodes
     assert_eq!(0, answer_space[0][7][0]);
     assert_eq!(0, answer_space[0][0][1]);
     assert_eq!(0, answer_space[0][7][1]);
     assert_eq!(0, answer_space[0][0][2]);
     assert_eq!(0, answer_space[0][7][2]);
-    fill_out_time_n(&distances, &flows, &mut answer_space, 2);
+    assert_eq!(0, answer_space[0][0][3]);
+    assert_eq!(0, answer_space[0][7][3]);
+    fill_out_time_n( &valves, &mut answer_space, 2);
     assert_eq!(0, answer_space[1][0][0]);  // time, toggles, nodes
     assert_eq!(0, answer_space[1][7][0]);
     assert_eq!(0, answer_space[1][0][1]);
     assert_eq!(0, answer_space[1][7][1]);
     assert_eq!(0, answer_space[1][0][2]);
     assert_eq!(0, answer_space[1][7][2]);
-    fill_out_time_n(&distances, &flows, &mut answer_space, 3);
+    assert_eq!(0, answer_space[1][0][3]);
+    assert_eq!(0, answer_space[1][7][3]);
+    fill_out_time_n( &valves, &mut answer_space, 3);
     assert_eq!(1, answer_space[2][0][0]);  // time, toggles, nodes
     assert_eq!(0, answer_space[2][7][0]);
     assert_eq!(3, answer_space[2][0][1]);
     assert_eq!(0, answer_space[2][7][1]);
-    assert_eq!(7, answer_space[2][0][2]);
+    assert_eq!(0, answer_space[2][0][2]);
     assert_eq!(0, answer_space[2][7][2]);
-    fill_out_time_n(&distances, &flows, &mut answer_space, 4);
+    assert_eq!(7, answer_space[2][0][3]);
+    //assert_eq!(7, answer_space[2][7][3]);   // because last bit clear
+    //assert_eq!(0, answer_space[2][15][3]);
+    fill_out_time_n( &valves, &mut answer_space, 4);
     assert_eq!(3, answer_space[3][0][0]);  // move to 1 and turn on
-    assert_eq!(0, answer_space[3][7][0]);
-    assert_eq!(7, answer_space[3][0][1]);  // you have time to move to #2 and turn it on for 7 instead of 2x3
-    assert_eq!(0, answer_space[3][7][1]);
-    assert_eq!(14, answer_space[3][0][2]);  // stay where you are and turn on
-    assert_eq!(0, answer_space[3][7][2]);
-    fill_out_time_n(&distances, &flows, &mut answer_space, 5);
-    assert_eq!(7, answer_space[4][0][0]);  // move to 2 and turn on
-    assert_eq!(0, answer_space[4][7][0]);
-    assert_eq!(16, answer_space[4][0][1]);  // stay here, turn it on (for 9) move to 3 for 7. Better than move to 3 and turn on for 2*7. The code figured it out!
-    assert_eq!(0, answer_space[4][7][1]);
-    assert_eq!(24, answer_space[4][0][2]);  // stay where you are and turn on (21), then move one and turn on 2 for 3
-    assert_eq!(0, answer_space[4][7][2]);    
-    assert_eq!(6, answer_space[4][4][2]); // if you start on 2 when it's already toggled, what can you do? MOve left and turn on for 2 units
-    fill_out_time_n(&distances, &flows, &mut answer_space, 6);
-    assert_eq!(16, answer_space[5][0][0]);  // move to 1, turn on for 9, move to 2 and turn on for 7
-    assert_eq!(0, answer_space[5][7][0]);
-    assert_eq!(26, answer_space[5][0][1]);  // move to 2 and turn on for 3*7, then back for 3 for 21...or turn on for 3*4, move to 2 for 2*7 = 14+12 = 26
-    assert_eq!(0, answer_space[5][7][1]);
-    assert_eq!(34, answer_space[5][0][2]);  // stay where you are and turn on for 28, then to #2 for 6
-    assert_eq!(0, answer_space[5][7][2]);    
+    //assert_eq!(0, answer_space[3][15][0]);
+    assert_eq!(6, answer_space[3][0][1]);  // you don't have time to move to #3 and turn it on for 7 instead of 2x3
+    //assert_eq!(0, answer_space[3][15][1]);
+    assert_eq!(7, answer_space[3][0][2]);  
+    //assert_eq!(0, answer_space[3][15][2]);
+    assert_eq!(14, answer_space[3][0][3]);
+    //assert_eq!(0, answer_space[3][15][3]); 
+    fill_out_time_n( &valves, &mut answer_space, 5);
+    assert_eq!(6, answer_space[4][0][0]);  // move to 1 and turn on
+    //assert_eq!(0, answer_space[4][15][0]);
+    assert_eq!(10, answer_space[4][0][1]);  
+    //assert_eq!(0, answer_space[4][15][1]);
+    assert_eq!(14, answer_space[4][0][2]);  
+    //assert_eq!(0, answer_space[4][15][2]);    
+    assert_eq!(21, answer_space[4][4][3]); // if you start on 2 when it's already toggled, what can you do? MOve left and turn on for 2 units
+    assert_eq!(21, answer_space[4][0][3]);
+    //assert_eq!(0, answer_space[4][15][3]); 
+    fill_out_time_n( &valves, &mut answer_space, 6);
+    assert_eq!(10, answer_space[5][0][0]);  // I think turn on where you're at (4), step (6) is better than step (9) and step back (1)move to 1, turn on for 9, move to 2 and turn on for 7
+    //assert_eq!(0, answer_space[5][15][0]);
+    assert_eq!(19, answer_space[5][0][1]);  // turn on for 12, move to 3 and turn on for 7
+    //assert_eq!(0, answer_space[5][15][1]);
+    assert_eq!(21, answer_space[5][0][2]);  // move right, 3*7
+    //assert_eq!(0, answer_space[5][15][2]);    
+    assert_eq!(31, answer_space[5][0][3]);  // 4*7+3
+    //assert_eq!(0, answer_space[5][15][3]); 
+    //assert_eq!()
+    
+}
+
+#[test]
+fn test_optimized_sitch() {  // when optimized, 3 becomes 2
+    let distances: Vec<Vec<usize>> = vec![vec![0,1,2,3],vec![1,0,1,2],vec![2,1,0,1],vec![3,2,1,0]];
+    let mut valves = vec![
+        Valve{flow:1u16,id:"A".to_string(), distances: HashMap::new()},
+        Valve{flow:3u16,id:"B".to_string(), distances: HashMap::new()},
+        Valve{flow:0u16,id:"AA".to_string(), distances: HashMap::new()},
+        Valve{flow:7u16,id:"D".to_string(), distances: HashMap::new()}];
+    transcribe_distances_into_valves(&mut valves, &distances);
+    let toggles_size = 1 << valves.len();
+    // array of time * starting-point * time 
+    let mut answer_space = vec![vec![vec![0u16;valves.len()];toggles_size];10];
+    fill_out_time_n(&valves, &mut answer_space, 1);
+    assert_eq!(0, answer_space[0][0][0]);  // time, toggles, nodes
+    assert_eq!(0, answer_space[0][7][0]);
+    assert_eq!(0, answer_space[0][0][1]);
+    assert_eq!(0, answer_space[0][7][1]);
+    assert_eq!(0, answer_space[0][0][2]);
+    assert_eq!(0, answer_space[0][7][2]);
+    fill_out_time_n( &valves, &mut answer_space, 2);
+    assert_eq!(0, answer_space[1][0][0]);  // time, toggles, nodes
+    assert_eq!(0, answer_space[1][7][0]);
+    assert_eq!(0, answer_space[1][0][1]);
+    assert_eq!(0, answer_space[1][7][1]);
+    assert_eq!(0, answer_space[1][0][2]);
+    assert_eq!(0, answer_space[1][7][2]);
+    fill_out_time_n( &valves, &mut answer_space, 3);
+    assert_eq!(1, answer_space[2][0][0]);  // time, toggles, nodes
+    assert_eq!(0, answer_space[2][7][0]);
+    assert_eq!(3, answer_space[2][0][1]);
+    assert_eq!(0, answer_space[2][7][1]);
+    assert_eq!(7, answer_space[2][0][3]);
+    //assert_eq!(7, answer_space[2][7][3]);   // because last bit clear
+    //assert_eq!(0, answer_space[2][15][3]);
+    fill_out_time_n( &valves, &mut answer_space, 4);
+    assert_eq!(3, answer_space[3][0][0]);  // move to 1 and turn on
+    //assert_eq!(0, answer_space[3][15][0]);
+    assert_eq!(6, answer_space[3][0][1]);  // you don't have time to move to #3 and turn it on for 7 instead of 2x3
+    //assert_eq!(0, answer_space[3][15][1]);
+    assert_eq!(7, answer_space[3][0][2]);  
+    //assert_eq!(0, answer_space[3][15][2]);
+    assert_eq!(14, answer_space[3][0][3]);
+    //assert_eq!(0, answer_space[3][15][3]); 
+    fill_out_time_n( &valves, &mut answer_space, 5);
+    assert_eq!(6, answer_space[4][0][0]);  // move to 1 and turn on
+    //assert_eq!(0, answer_space[4][15][0]);
+    assert_eq!(10, answer_space[4][0][1]);  
+    //assert_eq!(0, answer_space[4][15][1]);
+    assert_eq!(14, answer_space[4][0][2]);  
+    //assert_eq!(0, answer_space[4][15][2]);    
+    assert_eq!(21, answer_space[4][4][3]); // if you start on 2 when it's already toggled, what can you do? MOve left and turn on for 2 units
+    assert_eq!(21, answer_space[4][0][3]);
+    //assert_eq!(0, answer_space[4][15][3]); 
+    fill_out_time_n( &valves, &mut answer_space, 6);
+    assert_eq!(10, answer_space[5][0][0]);  // I think turn on where you're at (4), step (6) is better than step (9) and step back (1)move to 1, turn on for 9, move to 2 and turn on for 7
+    //assert_eq!(0, answer_space[5][15][0]);
+    assert_eq!(19, answer_space[5][0][1]);  // turn on for 12, move to 3 and turn on for 7
+    //assert_eq!(0, answer_space[5][15][1]);
+    assert_eq!(21, answer_space[5][0][2]);  // move right, 3*7
+    //assert_eq!(0, answer_space[5][15][2]);    
+    assert_eq!(31, answer_space[5][0][3]);  // 4*7+3
+    //assert_eq!(0, answer_space[5][15][3]); 
     //assert_eq!()
     
 }
@@ -131,9 +244,8 @@ fn test_sample_input() {
 }
 
 // returns distance matrix and flow matrix
-fn parse_input(input: &str) -> (Vec<Vec<usize>>, Vec<u16>) {
-    let mut flows: Vec<u16> = vec![]; 
-    let mut valve_ids: Vec<String> = vec![];
+fn parse_input(input: &str) -> (Vec<Vec<usize>>, Vec<Valve>) {
+    let mut valves: Vec<Valve> = vec![];
     let mut tunnels_for_valves: Vec<String> = vec![];
     for line in input.lines() {
         let mut valve_id = String::new();
@@ -142,8 +254,7 @@ fn parse_input(input: &str) -> (Vec<Vec<usize>>, Vec<u16>) {
         println!("{line}");
         match sscanf!(line, "Valve {} has flow rate={}; tunnels lead to valves {}", valve_id, flow, tunnels) {
             Ok(_)=>{
-                valve_ids.push(valve_id);
-                flows.push(flow);
+                valves.push(Valve{id:valve_id, flow:flow, distances:HashMap::new()});
                 tunnels_for_valves.push(tunnels);
             },
             Err(err) => {
@@ -154,11 +265,11 @@ fn parse_input(input: &str) -> (Vec<Vec<usize>>, Vec<u16>) {
     }
 
     // create adjacency
-    let mut distances: Vec<Vec<usize>> = vec![vec![1000;valve_ids.len()];valve_ids.len()];
+    let mut distances: Vec<Vec<usize>> = vec![vec![1000;valves.len()];valves.len()];
     for (valve_idx,tunnels) in tunnels_for_valves.iter().enumerate() {
         let tunnel_ids = tunnels.split(", ");
         for tunnel_id in tunnel_ids {
-            let target_valve_idx = valve_ids.iter().position(|x| x==tunnel_id).unwrap();
+            let target_valve_idx = valves.iter().position(|x| x.id==tunnel_id).unwrap();
             distances[valve_idx][target_valve_idx] = 1;
             distances[valve_idx][valve_idx] = 0;
         }
@@ -181,7 +292,6 @@ fn parse_input(input: &str) -> (Vec<Vec<usize>>, Vec<u16>) {
         if !made_change {break;}
     }
 
-
     // validate symmetry
     for (i, distance_row) in distances.iter().enumerate() {
         for (j, distance) in distance_row.iter().enumerate() {
@@ -189,46 +299,34 @@ fn parse_input(input: &str) -> (Vec<Vec<usize>>, Vec<u16>) {
         }
     }
 
-    (distances, flows)
+    transcribe_distances_into_valves(&mut valves, &distances);
+
+    (distances, valves)
+}
+
+fn transcribe_distances_into_valves(valves: &mut Vec<Valve>, distances: &Vec<Vec<usize>>) {
+    // add back to valves
+    // there's probably a better way to do this to deal with the borrower
+    let ids: Vec<String> = valves.iter().map(|v| v.id.clone()).collect();
+    for i in 0..valves.len() {
+        for j in 0..valves.len() {
+            valves[i].distances.insert(ids[j].clone(), distances[i][j] as u16);
+        }
+    }
 }
 
 #[test]
 fn test_parse_input() {
-    let (distances, flows) = parse_input(get_sample_input());
-    assert_eq!(0,flows[0]);
-    assert_eq!(13,flows[1]);
-    assert_eq!(21,flows[9]);
+    let (distances, valves) = parse_input(get_sample_input());
+    assert_eq!(0,valves[0].flow);
+    assert_eq!(13,valves[1].flow);
+    assert_eq!(21,valves[9].flow);
     assert_eq!(1,distances[0][1]);
     assert_eq!(1,distances[1][0]);
     assert_eq!(3,distances[0][5]);
     assert_eq!(3,distances[5][0]);
     assert_eq!(2,distances[0][9]);
     assert_eq!(2,distances[9][0]);
-}
-
-fn trim_distances_and_flows(distances: &mut Vec<Vec<usize>>, flows: &mut Vec<u16>) {
-    // we only care about the ones that flow
-    // using the example from the retain() docs
-    let mut flows_iter = flows.iter();
-    distances.retain(|_| *flows_iter.next().unwrap()>0);
-
-    for i in 0..distances.len() {
-        let mut flows_iter = flows.iter();
-        distances[i].retain(|_| *flows_iter.next().unwrap()>0);
-    }
-
-    flows.retain(|flow| flow>&0 );
-}
-
-#[test]
-fn test_trim_distances_and_flows() {
-    let (mut distances,mut flows) = parse_input(get_sample_input());
-    trim_distances_and_flows(&mut distances, &mut flows);
-    assert_eq!(6,distances.len());
-    assert_eq!(6,flows.len());
-    assert_eq!(6,distances[0].len());
-    assert_eq!(13,flows[0]);
-    assert_eq!(21,flows[5]);
 }
 
 fn get_sample_input() -> &'static str {
