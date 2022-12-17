@@ -16,48 +16,67 @@ type AnswerSpace = Vec<Vec<Vec<u16>>>;
 struct Valve {
     id: String,
     flow: u16,
-    distances: HashMap<String,u16>
+    distances: HashMap<String,u16>,
+    bit: Option<usize>
 }
 
-fn switch_enabled(bitset: usize, switch: usize) -> bool {
-    (bitset & (1<<switch)) != 0
+fn switch_enabled(bitset: usize, important_valves: &Vec<&Valve>, valve: &Valve) -> bool {
+    match get_bit_for_valve(important_valves, valve) {
+        Some(bit) => { (bitset & (1<<bit)) != 0 }
+        None => { false } // we could probably skip some math if we acted as if 0 flow switches were aleady toggled but less readable?
+    }
 }
 
 fn do_the_thing(input: &str) -> u16{
     let (mut distances, mut valves) = parse_input(input);
     //trim_distances_and_valves(&mut distances, &mut flows);
-    let answer_space = evaluate(&distances, &valves, 30);
+    let answer_space = evaluate(&distances, &mut valves, 30);
 
-    let starting_valve_idx = get_important_valves(&valves).iter().position(|v| v.id=="AA").unwrap();
+    let starting_valve_idx = valves.iter().position(|v| v.id=="AA").unwrap();
     answer_space[30][0][starting_valve_idx]
 }
 
 // can turn into a hashmap later if slow
-fn get_valve_for_toggle(valves: &Vec<Valve>, toggle_idx:usize) -> &Valve {
-    valves.iter().filter(|valve| valve.flow>0).nth(toggle_idx).unwrap()
+// fn get_valve_for_toggle(valves: &Vec<Valve>, toggle_idx:usize) -> &Valve {
+//     valves.iter().filter(|valve| valve.flow>0).nth(toggle_idx).unwrap()
+// }
+
+// if things are slow this is an obvious optimization target
+fn get_bit_for_valve(important_valves: &Vec<&Valve>, valve: &Valve) -> Option<usize> {
+    valve.bit
+    //important_valves.iter().position(|important_valve| important_valve.id == valve.id) // in theory could just compare pointers, not sure how to do that
 }
 
-fn fill_out_time_n(valves: &Vec<Valve>, answer_space: &mut AnswerSpace, time_left: u16) {
+fn fill_out_time_n(valves: &Vec<Valve>, answer_space: &mut AnswerSpace, time_left: usize) {
     // at time n, do we travel to another node and turn it on (getting the value for its time-distance entry
     // in the table) or do we turn on our current switch?
+    if time_left==14 {
+        println!("stop");
+    }
     let important_valves = get_important_valves(valves);
     let toggle_flags_range = 1 << important_valves.len();
     for bitset in 0..toggle_flags_range {
-        for (start_toggle_idx, start_node_flow) in important_valves.iter().enumerate() {
-            for (dest_toggle_idx, dest_node_flow) in important_valves.iter().enumerate() {
-                if !(switch_enabled(bitset, dest_toggle_idx)) {
+        for (start_toggle_idx, start_valve) in valves.iter().enumerate() {
+            for (dest_toggle_idx, dest_valve) in valves.iter().enumerate() {
+                let mut turn_on_value = 0;
+                let mut changed_bitset = bitset;
+                let distance = start_valve.distances[&dest_valve.id];
+                if !(switch_enabled(bitset, &important_valves, &dest_valve)) {
                     // we get the value of traveling there + turning on, plus the value for starting there with it off
-                    let distance = important_valves[start_toggle_idx].distances[&important_valves[dest_toggle_idx].id];
-                    if distance<time_left-1 {  // example, distance 1, time_left 2: enough time to travel there, turn it on, but it doesn't fuel until next tick, and get no further value
-                        let turn_on_value = dest_node_flow.flow * (time_left-1 as u16-distance);  // distance 1, time_left 2, 1 unit of flow
-                        let changed_bitset = bitset | (1<<dest_toggle_idx);
-                        // -2 below: -1 for starting array indexing at 0, -1 for the time it took to throw the switch
-                        let node_value = answer_space[(time_left-distance-1) as usize][changed_bitset][dest_toggle_idx]; // time_left 2, distance 1, 0th index (which is all 0s)
-                        let our_value = turn_on_value + node_value;
-                        if our_value > answer_space[time_left as usize][bitset][start_toggle_idx] {  
-                            // hard to wrap my head around which bitset to use. this is the one where we haven't flipped it yet, because flipping it is one of the options we could take at this location at this time
-                            answer_space[time_left as usize][bitset][start_toggle_idx] = our_value;
+                    if distance==0 {
+                        turn_on_value = dest_valve.flow * (time_left as u16-1);
+                        match get_bit_for_valve(&important_valves, &dest_valve) {
+                            Some(bit) => { changed_bitset = changed_bitset | 1<<bit; }
+                            None => {}
                         }
+                    }
+                }
+                if distance<=1 {
+                    let node_value = answer_space[(time_left-1) as usize][changed_bitset][dest_toggle_idx]; // time_left 2, distance 1, 0th index (which is all 0s)
+                    let our_value = turn_on_value + node_value;
+                    if our_value > answer_space[time_left as usize][bitset][start_toggle_idx] {  
+                        // hard to wrap my head around which bitset to use. this is the one where we haven't flipped it yet, because flipping it is one of the options we could take at this location at this time
+                        answer_space[time_left as usize][bitset][start_toggle_idx] = our_value;
                     }
                 }
             }
@@ -74,22 +93,34 @@ fn get_important_valves(valves: &Vec<Valve>) -> Vec<&Valve> {
     important_valves
 }
 
-fn evaluate(distances: &Vec<Vec<usize>>, valves: &Vec<Valve>, time: usize)->AnswerSpace {
+fn map_bits_to_valves(valves: &mut Vec<Valve>) {
+    let mut bit_counter = 0;
+    for valve in valves {
+        if valve.flow > 0 || valve.id == "AA" {
+            valve.bit = Some(bit_counter);
+            bit_counter = bit_counter+1;
+        }
+    }
+}
+
+fn evaluate(distances: &Vec<Vec<usize>>, valves: &mut Vec<Valve>, time: usize)->AnswerSpace {
     // allocate our mondo array
     // array of time * starting-point * time 
+    let num_valves = valves.len();
+    map_bits_to_valves(valves);
     let important_valves = get_important_valves(&valves);
     
     let toggles_size = 1 << important_valves.len();
     
-    let mut answer_space = vec![vec![vec![0u16;important_valves.len()];toggles_size];time+1];
+    let mut answer_space = vec![vec![vec![0u16;num_valves];toggles_size];time+1];
     // time left 0 is already filled with 0's - it is too late to accomplish anything, but I want a column in the array
     // to skip an if check
     
-    for i in 1..31 {
+    for i in 1..time+1 {
         fill_out_time_n(valves, &mut answer_space, i);
         
         println!("What to do when {i} time left");
-        for (j, valve) in important_valves.iter().enumerate() {
+        for (j, valve) in valves.iter().enumerate() {
             println!("{j} Valve {}/{}: best_flow {}", valve.id, valve.flow, answer_space[i as usize][0][j]);
         }
     }
@@ -103,12 +134,13 @@ fn evaluate(distances: &Vec<Vec<usize>>, valves: &Vec<Valve>, time: usize)->Answ
 fn test_simple_sitch() {
     let distances: Vec<Vec<usize>> = vec![vec![0,1,2,3],vec![1,0,1,2],vec![2,1,0,1],vec![3,2,1,0]];
     let mut valves = vec![
-        Valve{flow:1u16,id:"A".to_string(), distances: HashMap::new()},
-        Valve{flow:3u16,id:"B".to_string(), distances: HashMap::new()},
-        Valve{flow:0u16,id:"C".to_string(), distances: HashMap::new()},
-        Valve{flow:7u16,id:"D".to_string(), distances: HashMap::new()}];
+        Valve{flow:1u16,id:"AA".to_string(), distances: HashMap::new(), bit: None},
+        Valve{flow:3u16,id:"B".to_string(), distances: HashMap::new(), bit: None},
+        Valve{flow:0u16,id:"C".to_string(), distances: HashMap::new(), bit: None},
+        Valve{flow:7u16,id:"D".to_string(), distances: HashMap::new(), bit: None}];
     transcribe_distances_into_valves(&mut valves, &distances);
     let toggles_size = 1 << valves.len();
+    map_bits_to_valves(&mut valves);
     // array of time * starting-point * time 
     let mut answer_space = vec![vec![vec![0u16;valves.len()];toggles_size];10];
     fill_out_time_n(&valves, &mut answer_space, 1);
@@ -129,6 +161,7 @@ fn test_simple_sitch() {
     assert_eq!(0, answer_space[1][7][2]);
     assert_eq!(0, answer_space[1][0][3]);
     assert_eq!(0, answer_space[1][7][3]);
+    assert_eq!(0, answer_space[1][1][0]);
     fill_out_time_n( &valves, &mut answer_space, 3);
     assert_eq!(1, answer_space[2][0][0]);  // time, toggles, nodes
     assert_eq!(0, answer_space[2][7][0]);
@@ -155,7 +188,7 @@ fn test_simple_sitch() {
     //assert_eq!(0, answer_space[4][15][1]);
     assert_eq!(14, answer_space[4][0][2]);  
     //assert_eq!(0, answer_space[4][15][2]);    
-    assert_eq!(21, answer_space[4][4][3]); // if you start on 2 when it's already toggled, what can you do? MOve left and turn on for 2 units
+    assert_eq!(3, answer_space[4][4][3]); // bit 2 here goes with value 3 in optimized sitch; you have to move. step, step, turn on
     assert_eq!(21, answer_space[4][0][3]);
     //assert_eq!(0, answer_space[4][15][3]); 
     fill_out_time_n( &valves, &mut answer_space, 6);
@@ -175,10 +208,10 @@ fn test_simple_sitch() {
 fn test_optimized_sitch() {  // when optimized, 3 becomes 2
     let distances: Vec<Vec<usize>> = vec![vec![0,1,2,3],vec![1,0,1,2],vec![2,1,0,1],vec![3,2,1,0]];
     let mut valves = vec![
-        Valve{flow:1u16,id:"A".to_string(), distances: HashMap::new()},
-        Valve{flow:3u16,id:"B".to_string(), distances: HashMap::new()},
-        Valve{flow:0u16,id:"AA".to_string(), distances: HashMap::new()},
-        Valve{flow:7u16,id:"D".to_string(), distances: HashMap::new()}];
+        Valve{flow:1u16,id:"A".to_string(), distances: HashMap::new(), bit: None},git
+        Valve{flow:3u16,id:"B".to_string(), distances: HashMap::new(), bit: None},
+        Valve{flow:0u16,id:"AA".to_string(), distances: HashMap::new(), bit: None},
+        Valve{flow:7u16,id:"D".to_string(), distances: HashMap::new(), bit: None}];
     transcribe_distances_into_valves(&mut valves, &distances);
     let toggles_size = 1 << valves.len();
     // array of time * starting-point * time 
@@ -254,7 +287,7 @@ fn parse_input(input: &str) -> (Vec<Vec<usize>>, Vec<Valve>) {
         println!("{line}");
         match sscanf!(line, "Valve {} has flow rate={}; tunnels lead to valves {}", valve_id, flow, tunnels) {
             Ok(_)=>{
-                valves.push(Valve{id:valve_id, flow:flow, distances:HashMap::new()});
+                valves.push(Valve{id:valve_id, flow:flow, distances:HashMap::new(), bit: None});
                 tunnels_for_valves.push(tunnels);
             },
             Err(err) => {
@@ -313,6 +346,12 @@ fn transcribe_distances_into_valves(valves: &mut Vec<Valve>, distances: &Vec<Vec
             valves[i].distances.insert(ids[j].clone(), distances[i][j] as u16);
         }
     }
+}
+
+#[test]
+fn test_part_1() {
+    let answer = do_the_thing(get_puzzle_input());
+    assert_eq!(1638, answer);
 }
 
 #[test]
