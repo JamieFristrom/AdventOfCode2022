@@ -33,7 +33,9 @@ fn do_the_other_thing(input: &str, bound: usize) -> i64 {
     // results[0].0*4000000+results[0].1
     let mut beacon : Option<(i64,i64)> = None;
     for y in 0..bound {
-        println!("row {y}");
+        if (y%4000==0) {
+            println!("row {y}");
+        }
         let spans = get_beacon_exclusion_spans(&sensors, y as i64);
         let spans = merge_spans(&spans);
         match spans.iter().find(|span| span.0 >0 && span.0 <=bound as i64 ) {
