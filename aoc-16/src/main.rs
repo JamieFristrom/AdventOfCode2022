@@ -10,8 +10,8 @@ fn main() {
 
 // my insight here is that given a known set of already-toggled-switches (2^n), a starting point (n), and time,
 // there is a right answer, and that's a (barely) tractable number of things (30m for 15 toggles)
-// arbitrarily - time, toggles, nodes
-type AnswerSpace = Vec<Vec<Vec<u16>>>;
+// arbitrarily - time, toggles, your start node, elephant start node
+type AnswerSpace = Vec<Vec<Vec<Vec<u16>>>>;
 
 struct Valve {
     id: String,
@@ -27,7 +27,7 @@ fn switch_enabled(bitset: usize, important_valves: &Vec<&Valve>, valve: &Valve) 
     }
 }
 
-fn do_the_thing(input: &str) -> u16{
+fn do_the_thing(input: &str) -> u16 {
     let (mut distances, mut valves) = parse_input(input);
     //trim_distances_and_valves(&mut distances, &mut flows);
     let answer_space = evaluate(&distances, &mut valves, 30);
@@ -112,7 +112,8 @@ fn evaluate(distances: &Vec<Vec<usize>>, valves: &mut Vec<Valve>, time: usize)->
     
     let toggles_size = 1 << important_valves.len();
     
-    let mut answer_space = vec![vec![vec![0u16;num_valves];toggles_size];time+1];
+    let mut answer_space = vec![vec![vec![vec![0u16;valves.len()];valves.len()];toggles_size];time+1];
+
     // time left 0 is already filled with 0's - it is too late to accomplish anything, but I want a column in the array
     // to skip an if check
     
@@ -120,8 +121,8 @@ fn evaluate(distances: &Vec<Vec<usize>>, valves: &mut Vec<Valve>, time: usize)->
         fill_out_time_n(valves, &mut answer_space, i);
         
         println!("What to do when {i} time left");
-        for (j, valve) in valves.iter().enumerate() {
-            println!("{j} Valve {}/{}: best_flow {}", valve.id, valve.flow, answer_space[i as usize][0][j]);
+        for (j, valve) in important_valves.iter().enumerate() {
+            println!("{j} Valve {}/{}: best_flow {}", valve.id, valve.flow, answer_space[i as usize][0][j][j]);
         }
     }
     // for tick in 1..time {
@@ -202,7 +203,8 @@ fn test_simple_sitch() {
     //assert_eq!(0, answer_space[5][15][3]); 
     //assert_eq!()
     
-}
+// }
+
 
 #[test]
 fn test_sample_input() {
