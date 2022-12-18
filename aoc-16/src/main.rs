@@ -1,11 +1,10 @@
 use scanf::sscanf;
-use std::{collections::HashMap, hash::Hash};
-use core::time;
+use std::{collections::HashMap, hash::Hash, fmt::Binary};
 
 fn main() {
     println!("Hello, world!");
-    let answer = do_the_thing(get_puzzle_input());
-    println!("Boom : {answer}");
+    let answer = do_the_thing(get_puzzle_input(), 26);
+    println!("Boom? : {answer}");
 }
 
 // my insight here is that given a known set of already-toggled-switches (2^n), a starting point (n), and time,
@@ -27,13 +26,13 @@ fn switch_enabled(bitset: usize, important_valves: &Vec<&Valve>, valve: &Valve) 
     }
 }
 
-fn do_the_thing(input: &str) -> u16 {
-    let (mut distances, mut valves) = parse_input(input);
+fn do_the_thing(input: &str, time: usize) -> u16 {
+    let (distances, mut valves) = parse_input(input);
     //trim_distances_and_valves(&mut distances, &mut flows);
-    let answer_space = evaluate(&distances, &mut valves, 30);
+    let answer_space = evaluate(&mut valves, time);
 
     let starting_valve_idx = valves.iter().position(|v| v.id=="AA").unwrap();
-    answer_space[30][0][starting_valve_idx]
+    answer_space[time][0][starting_valve_idx][starting_valve_idx]
 }
 
 // can turn into a hashmap later if slow
@@ -42,7 +41,7 @@ fn do_the_thing(input: &str) -> u16 {
 // }
 
 // if things are slow this is an obvious optimization target
-fn get_bit_for_valve(important_valves: &Vec<&Valve>, valve: &Valve) -> Option<usize> {
+fn get_bit_for_valve(_important_valves: &Vec<&Valve>, valve: &Valve) -> Option<usize> {
     valve.bit
     //important_valves.iter().position(|important_valve| important_valve.id == valve.id) // in theory could just compare pointers, not sure how to do that
 }
@@ -50,33 +49,52 @@ fn get_bit_for_valve(important_valves: &Vec<&Valve>, valve: &Valve) -> Option<us
 fn fill_out_time_n(valves: &Vec<Valve>, answer_space: &mut AnswerSpace, time_left: usize) {
     // at time n, do we travel to another node and turn it on (getting the value for its time-distance entry
     // in the table) or do we turn on our current switch?
-    if time_left==14 {
-        println!("stop");
-    }
     let important_valves = get_important_valves(valves);
     let toggle_flags_range = 1 << important_valves.len();
     for bitset in 0..toggle_flags_range {
-        for (start_toggle_idx, start_valve) in valves.iter().enumerate() {
-            for (dest_toggle_idx, dest_valve) in valves.iter().enumerate() {
-                let mut turn_on_value = 0;
-                let mut changed_bitset = bitset;
-                let distance = start_valve.distances[&dest_valve.id];
-                if !(switch_enabled(bitset, &important_valves, &dest_valve)) {
-                    // we get the value of traveling there + turning on, plus the value for starting there with it off
-                    if distance==0 {
-                        turn_on_value = dest_valve.flow * (time_left as u16-1);
-                        match get_bit_for_valve(&important_valves, &dest_valve) {
-                            Some(bit) => { changed_bitset = changed_bitset | 1<<bit; }
-                            None => {}
+        println!("toggle bits {:#015b}",bitset);
+        for (your_start_toggle_idx, your_start_valve) in valves.iter().enumerate() {
+            for (elephant_start_toggle_idx, elephant_start_valve) in valves.iter().enumerate() {
+                for (your_dest_toggle_idx, your_dest_valve) in valves.iter().enumerate() {
+                    for(elephant_dest_toggle_idx, elephant_dest_valve) in valves.iter().enumerate() {
+                        if your_dest_toggle_idx != elephant_dest_toggle_idx {
+                            let mut turn_on_value = 0;
+                            let mut changed_bitset = bitset;
+                            let your_distance = your_start_valve.distances[&your_dest_valve.id];
+                            if your_distance <= 1 {
+                                let elephant_distance = elephant_start_valve.distances[&elephant_dest_valve.id];
+                                if elephant_distance <= 1 { 
+                                    if your_distance <= 1 && elephant_distance <= 1 { // otherwise invalid move
+                                        if your_distance==0 {
+                                            if !(switch_enabled(bitset, &important_valves, &your_dest_valve)) {
+                                            // we get the value of traveling there + turning on, plus the value for starting there with it off
+                                                turn_on_value += your_dest_valve.flow * (time_left as u16-1);
+                                                match get_bit_for_valve(&important_valves, &your_dest_valve) {
+                                                    Some(bit) => { changed_bitset = changed_bitset | 1<<bit; }
+                                                    None => {}
+                                                }
+                                            }
+                                        }
+                                        if elephant_distance==0 {
+                                            if !(switch_enabled(bitset, &important_valves, &elephant_dest_valve)) {
+                                            // we get the value of traveling there + turning on, plus the value for starting there with it off
+
+                                                turn_on_value += elephant_dest_valve.flow * (time_left as u16-1);
+                                                match get_bit_for_valve(&important_valves, &elephant_dest_valve) {
+                                                    Some(bit) => { changed_bitset = changed_bitset | 1<<bit; }
+                                                    None => {}
+                                                }
+                                            }
+                                        }
+                                        let node_value = answer_space[(time_left-1) as usize][changed_bitset][your_dest_toggle_idx][elephant_dest_toggle_idx]; 
+                                        let our_value = turn_on_value + node_value;
+                                        if our_value > answer_space[time_left as usize][bitset][your_start_toggle_idx][elephant_start_toggle_idx] {  
+                                            answer_space[time_left as usize][bitset][your_start_toggle_idx][elephant_start_toggle_idx] = our_value;
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
-                }
-                if distance<=1 {
-                    let node_value = answer_space[(time_left-1) as usize][changed_bitset][dest_toggle_idx]; // time_left 2, distance 1, 0th index (which is all 0s)
-                    let our_value = turn_on_value + node_value;
-                    if our_value > answer_space[time_left as usize][bitset][start_toggle_idx] {  
-                        // hard to wrap my head around which bitset to use. this is the one where we haven't flipped it yet, because flipping it is one of the options we could take at this location at this time
-                        answer_space[time_left as usize][bitset][start_toggle_idx] = our_value;
                     }
                 }
             }
@@ -86,7 +104,7 @@ fn fill_out_time_n(valves: &Vec<Valve>, answer_space: &mut AnswerSpace, time_lef
 
 fn get_important_valves(valves: &Vec<Valve>) -> Vec<&Valve> {
     // optimized:
-    let important_valves: Vec<&Valve> = valves.iter().filter(|valve| valve.flow>0 || valve.id=="AA").collect();
+    let important_valves: Vec<&Valve> = valves.iter().filter(|valve| valve.flow>0 /*|| valve.id=="AA"*/).collect();
     // because you start here it's on the important list
     // unoptimized:
     //let important_valves = valves;
@@ -96,17 +114,16 @@ fn get_important_valves(valves: &Vec<Valve>) -> Vec<&Valve> {
 fn map_bits_to_valves(valves: &mut Vec<Valve>) {
     let mut bit_counter = 0;
     for valve in valves {
-        if valve.flow > 0 || valve.id == "AA" {
+        if valve.flow > 0 {
             valve.bit = Some(bit_counter);
             bit_counter = bit_counter+1;
         }
     }
 }
 
-fn evaluate(distances: &Vec<Vec<usize>>, valves: &mut Vec<Valve>, time: usize)->AnswerSpace {
+fn evaluate(valves: &mut Vec<Valve>, time: usize)->AnswerSpace {
     // allocate our mondo array
     // array of time * starting-point * time 
-    let num_valves = valves.len();
     map_bits_to_valves(valves);
     let important_valves = get_important_valves(&valves);
     
@@ -143,73 +160,73 @@ fn test_simple_sitch() {
     let toggles_size = 1 << valves.len();
     map_bits_to_valves(&mut valves);
     // array of time * starting-point * time 
-    let mut answer_space = vec![vec![vec![0u16;valves.len()];toggles_size];10];
+    let mut answer_space = vec![vec![vec![vec![0u16;valves.len()];valves.len()];toggles_size];10];
     fill_out_time_n(&valves, &mut answer_space, 1);
-    assert_eq!(0, answer_space[0][0][0]);  // time, toggles, nodes
-    assert_eq!(0, answer_space[0][7][0]);
-    assert_eq!(0, answer_space[0][0][1]);
-    assert_eq!(0, answer_space[0][7][1]);
-    assert_eq!(0, answer_space[0][0][2]);
-    assert_eq!(0, answer_space[0][7][2]);
-    assert_eq!(0, answer_space[0][0][3]);
-    assert_eq!(0, answer_space[0][7][3]);
+    assert_eq!(0, answer_space[0][0][0][0]);  // time, toggles, nodes
+    assert_eq!(0, answer_space[0][7][0][0]);
+    assert_eq!(0, answer_space[0][0][1][1]);
+    assert_eq!(0, answer_space[0][7][1][1]);
+    assert_eq!(0, answer_space[0][0][2][2]);
+    assert_eq!(0, answer_space[0][7][2][2]);
+    assert_eq!(0, answer_space[0][0][3][3]);
+    assert_eq!(0, answer_space[0][7][3][3]);
     fill_out_time_n( &valves, &mut answer_space, 2);
-    assert_eq!(0, answer_space[1][0][0]);  // time, toggles, nodes
-    assert_eq!(0, answer_space[1][7][0]);
-    assert_eq!(0, answer_space[1][0][1]);
-    assert_eq!(0, answer_space[1][7][1]);
-    assert_eq!(0, answer_space[1][0][2]);
-    assert_eq!(0, answer_space[1][7][2]);
-    assert_eq!(0, answer_space[1][0][3]);
-    assert_eq!(0, answer_space[1][7][3]);
-    assert_eq!(0, answer_space[1][1][0]);
+    assert_eq!(0, answer_space[1][0][0][0]);  // time, toggles, nodes
+    assert_eq!(0, answer_space[1][7][0][0]);
+    assert_eq!(0, answer_space[1][0][1][1]);
+    assert_eq!(0, answer_space[1][7][1][1]);
+    assert_eq!(0, answer_space[1][0][2][2]);
+    assert_eq!(0, answer_space[1][7][2][2]);
+    assert_eq!(0, answer_space[1][0][3][3]);
+    assert_eq!(0, answer_space[1][7][3][3]);
+    assert_eq!(0, answer_space[1][1][0][0]);
     fill_out_time_n( &valves, &mut answer_space, 3);
-    assert_eq!(1, answer_space[2][0][0]);  // time, toggles, nodes
-    assert_eq!(0, answer_space[2][7][0]);
-    assert_eq!(3, answer_space[2][0][1]);
-    assert_eq!(0, answer_space[2][7][1]);
-    assert_eq!(0, answer_space[2][0][2]);
-    assert_eq!(0, answer_space[2][7][2]);
-    assert_eq!(7, answer_space[2][0][3]);
+    assert_eq!(1, answer_space[2][0][0][0]);  // time, toggles, nodes
+    assert_eq!(0, answer_space[2][7][0][0]);
+    assert_eq!(3, answer_space[2][0][1][1]);
+    assert_eq!(0, answer_space[2][7][1][1]);
+    assert_eq!(0, answer_space[2][0][2][2]);
+    assert_eq!(0, answer_space[2][7][2][2]);
+    assert_eq!(7, answer_space[2][0][3][3]);
     //assert_eq!(7, answer_space[2][7][3]);   // because last bit clear
     //assert_eq!(0, answer_space[2][15][3]);
-    fill_out_time_n( &valves, &mut answer_space, 4);
-    assert_eq!(3, answer_space[3][0][0]);  // move to 1 and turn on
-    //assert_eq!(0, answer_space[3][15][0]);
-    assert_eq!(6, answer_space[3][0][1]);  // you don't have time to move to #3 and turn it on for 7 instead of 2x3
-    //assert_eq!(0, answer_space[3][15][1]);
-    assert_eq!(7, answer_space[3][0][2]);  
-    //assert_eq!(0, answer_space[3][15][2]);
-    assert_eq!(14, answer_space[3][0][3]);
-    //assert_eq!(0, answer_space[3][15][3]); 
-    fill_out_time_n( &valves, &mut answer_space, 5);
-    assert_eq!(6, answer_space[4][0][0]);  // move to 1 and turn on
-    //assert_eq!(0, answer_space[4][15][0]);
-    assert_eq!(10, answer_space[4][0][1]);  
-    //assert_eq!(0, answer_space[4][15][1]);
-    assert_eq!(14, answer_space[4][0][2]);  
-    //assert_eq!(0, answer_space[4][15][2]);    
-    assert_eq!(3, answer_space[4][4][3]); // bit 2 here goes with value 3 in optimized sitch; you have to move. step, step, turn on
-    assert_eq!(21, answer_space[4][0][3]);
-    //assert_eq!(0, answer_space[4][15][3]); 
-    fill_out_time_n( &valves, &mut answer_space, 6);
-    assert_eq!(10, answer_space[5][0][0]);  // I think turn on where you're at (4), step (6) is better than step (9) and step back (1)move to 1, turn on for 9, move to 2 and turn on for 7
-    //assert_eq!(0, answer_space[5][15][0]);
-    assert_eq!(19, answer_space[5][0][1]);  // turn on for 12, move to 3 and turn on for 7
-    //assert_eq!(0, answer_space[5][15][1]);
-    assert_eq!(21, answer_space[5][0][2]);  // move right, 3*7
-    //assert_eq!(0, answer_space[5][15][2]);    
-    assert_eq!(31, answer_space[5][0][3]);  // 4*7+3
-    //assert_eq!(0, answer_space[5][15][3]); 
-    //assert_eq!()
+//     fill_out_time_n( &valves, &mut answer_space, 4);
+//     assert_eq!(3, answer_space[3][0][0]);  // move to 1 and turn on
+//     //assert_eq!(0, answer_space[3][15][0]);
+//     assert_eq!(6, answer_space[3][0][1]);  // you don't have time to move to #3 and turn it on for 7 instead of 2x3
+//     //assert_eq!(0, answer_space[3][15][1]);
+//     assert_eq!(7, answer_space[3][0][2]);  
+//     //assert_eq!(0, answer_space[3][15][2]);
+//     assert_eq!(14, answer_space[3][0][3]);
+//     //assert_eq!(0, answer_space[3][15][3]); 
+//     fill_out_time_n( &valves, &mut answer_space, 5);
+//     assert_eq!(6, answer_space[4][0][0]);  // move to 1 and turn on
+//     //assert_eq!(0, answer_space[4][15][0]);
+//     assert_eq!(10, answer_space[4][0][1]);  
+//     //assert_eq!(0, answer_space[4][15][1]);
+//     assert_eq!(14, answer_space[4][0][2]);  
+//     //assert_eq!(0, answer_space[4][15][2]);    
+//     assert_eq!(3, answer_space[4][4][3]); // bit 2 here goes with value 3 in optimized sitch; you have to move. step, step, turn on
+//     assert_eq!(21, answer_space[4][0][3]);
+//     //assert_eq!(0, answer_space[4][15][3]); 
+//     fill_out_time_n( &valves, &mut answer_space, 6);
+//     assert_eq!(10, answer_space[5][0][0]);  // I think turn on where you're at (4), step (6) is better than step (9) and step back (1)move to 1, turn on for 9, move to 2 and turn on for 7
+//     //assert_eq!(0, answer_space[5][15][0]);
+//     assert_eq!(19, answer_space[5][0][1]);  // turn on for 12, move to 3 and turn on for 7
+//     //assert_eq!(0, answer_space[5][15][1]);
+//     assert_eq!(21, answer_space[5][0][2]);  // move right, 3*7
+//     //assert_eq!(0, answer_space[5][15][2]);    
+//     assert_eq!(31, answer_space[5][0][3]);  // 4*7+3
+//     //assert_eq!(0, answer_space[5][15][3]); 
+//     //assert_eq!()
     
-// }
+}
 
 
 #[test]
 fn test_sample_input() {
-    let answer = do_the_thing(get_sample_input());
-    assert_eq!(1651, answer);
+    let answer = do_the_thing(get_sample_input(),26);
+    assert_eq!(1707, answer);
 }
 
 // returns distance matrix and flow matrix
