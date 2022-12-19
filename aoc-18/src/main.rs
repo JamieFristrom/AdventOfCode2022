@@ -1,9 +1,11 @@
 
+use std::collections::VecDeque;
+
 use scanf::sscanf;
 
 fn main() {
     println!("Hello, world!");
-    let answer = do_the_thing(parse_input(get_puzzle_input()));
+    let answer = do_the_other_thing(parse_input(get_puzzle_input()));
     println!("boom? {answer}");
 }
 
@@ -33,11 +35,199 @@ fn do_the_thing(droplet: Droplet) -> usize {
     counter
 }
 
+fn convert_to_space(droplet: &Droplet) -> Vec<Vec<Vec<u8>>> {
+    // an exterior flood fill should let us test inner droplets, and ones where they touch the exterior flood are the ones
+    let width = (droplet.iter().max_by_key(|drop| drop.0 ).unwrap().0 + 1) as usize;
+    let height = (droplet.iter().max_by_key(|drop| drop.1 ).unwrap().1 + 1) as usize;
+    let depth = (droplet.iter().max_by_key(|drop| drop.2 ).unwrap().2 + 1) as usize;
+    let mut space = vec![vec![vec![0;width];height];depth];
+    for drop in droplet {
+        space[drop.2 as usize][drop.1 as usize][drop.0 as usize] = 1;
+    }
+
+    space
+}
+
+fn flood_fill(space: &mut Vec<Vec<Vec<u8>>>) {
+    // looking at the data there's space all around the border, so a flood fill won't get trapped in one corner or anything
+    let adjustments = vec![
+        (-1, 0, 0),
+        ( 1, 0, 0),
+        ( 0, 1, 0),
+        ( 0,-1, 0),
+        ( 0, 0, 1),
+        ( 0, 0,-1)
+    ];
+
+    assert_eq!(0, space[0][0][0]);
+    let cursor = (0,0,0);
+    let mut queue = VecDeque::<(i32,i32,i32)>::new();
+    queue.push_back(cursor);
+    loop {
+        match queue.pop_front() {
+            Some(cursor) => {
+                if space[cursor.2 as usize][cursor.1 as usize][cursor.0 as usize] == 0 {
+                    space[cursor.2 as usize][cursor.1 as usize][cursor.0 as usize]=2;
+                    for adjustment in &adjustments {
+                        let new_cursor = (cursor.0+adjustment.0, cursor.1+adjustment.1, cursor.2+adjustment.2);
+                        if (new_cursor.2 as usize) < space.len()
+                           && (new_cursor.1 as usize) < space[0].len()
+                           && (new_cursor.0 as usize) < space[0][0].len() { 
+                                queue.push_back(new_cursor);
+                            }
+                    }
+                }
+            },
+            None => { break; }
+        }
+    }
+}
+
+#[test]
+fn test_flood_fill() {
+    let mut space = vec![
+        vec![
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0]],
+        vec![
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,1,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0]],
+        vec![
+            vec![0,0,0,0,0],
+            vec![0,0,1,0,0],
+            vec![0,1,0,1,0],
+            vec![0,0,1,0,0],
+            vec![0,0,0,0,0]],
+        vec![
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,1,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0]],
+        vec![
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0],
+            vec![0,0,0,0,0]]];
+
+    let expected_space = vec![
+        vec![
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2]],
+        vec![
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,1,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2]],
+        vec![
+            vec![2,2,2,2,2],
+            vec![2,2,1,2,2],
+            vec![2,1,0,1,2],
+            vec![2,2,1,2,2],
+            vec![2,2,2,2,2]],
+        vec![
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,1,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2]],
+        vec![
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2],
+            vec![2,2,2,2,2]]];
+
+    flood_fill(&mut space);
+    assert_eq!(expected_space,space);
+    let droplet = vec![(2,2,1),(2,1,2),(1,2,2),(3,2,2),(2,3,2),(2,2,3)];
+    assert_eq!(30, measure_surface_area(&droplet, &space));
+}
+
+fn measure_surface_area(droplet: &Droplet, space: &Vec<Vec<Vec<u8>>>) -> i64 {
+    let mut counter = 0;
+    for (drop_x,drop_y,drop_z) in droplet {
+        assert_eq!(1, space[*drop_z as usize][*drop_y as usize][*drop_x as usize]);
+        let adjustments: Vec<(i64,i64,i64)> = vec![
+            (-1, 0, 0),
+            ( 1, 0, 0),
+            ( 0, 1, 0),
+            ( 0,-1, 0),
+            ( 0, 0, 1),
+            ( 0, 0,-1)
+        ];
+        for (dx, dy, dz) in adjustments {
+            let newz = (drop_z+dz) as usize;
+            let newy = (drop_y+dy) as usize;
+            let newx = (drop_x+dx) as usize;
+            
+            if newz < space.len()
+                && newy < space[0].len()
+                && newx < space[0][0].len() { 
+                            
+                if space[newz][newy][newx] == 2 {
+                    counter += 1;
+                }
+            }
+            else {
+                counter += 1; // if it's at border of array it's by definition touching space there
+            }
+        }
+    }
+    
+    counter
+}
+
+fn do_the_other_thing(droplet: Droplet) -> i64 {
+    let mut space = convert_to_space(&droplet);
+    flood_fill(&mut space);
+
+    measure_surface_area(&droplet, &space)
+}
+
 #[test]
 fn test_sample_data() {
     let droplet = parse_input(get_sample_input());
     let answer = do_the_thing(droplet);
     assert_eq!(64, answer);
+}
+
+#[test]
+fn test_flood_sample_data() {
+    let droplet = parse_input(get_sample_input());
+    let mut space = convert_to_space(&droplet);
+    flood_fill(&mut space);
+    let mut air_pocket_count = 0;
+    for plane in &space {
+        for row in plane {
+            println!("{:?}",row);
+            for cell in row {
+                if *cell==0 {
+                    air_pocket_count += 1;
+                }
+            }
+        }
+        println!();
+    }
+    assert_eq!(1, air_pocket_count);
+    assert_eq!(0, space[5][2][2]);
+}
+#[test]
+fn test_sample_data_2() {
+    let droplet = parse_input(get_sample_input());
+    let answer = do_the_other_thing(droplet);
+    assert_eq!(58, answer);
 }
 
 fn parse_input(input: &str) -> Droplet {
