@@ -51,7 +51,17 @@ fn bfs(board: &Vec<Vec<u8>>, start: &(usize,usize), end:&(usize,usize)) -> i32 {
         }
     }
 
-    pathdata[start.1][start.0]
+    let mut answers: Vec<i32> = vec![];
+    for (y, row) in board.iter().enumerate() {
+        for (x, cell) in row.iter().enumerate() {
+            if *cell==0 {
+                answers.push(pathdata[y][x]);
+            }
+        }
+    }
+    
+    *answers.iter().min().unwrap()
+    //pathdata[start.1][start.0]
 }
 
 fn parse_input(input: &str) -> (Vec<Vec<u8>>, (usize,usize), (usize,usize)) {
@@ -83,7 +93,7 @@ fn parse_input(input: &str) -> (Vec<Vec<u8>>, (usize,usize), (usize,usize)) {
 #[test]
 fn test_sample() {
     let answer = do_the_thing(get_sample_input());
-    assert_eq!(31, answer);
+    assert_eq!(29, answer);
 }
 
 #[test]
