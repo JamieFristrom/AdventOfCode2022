@@ -31,22 +31,37 @@ fn main() {
 
 fn do_the_thing(input: &str, num_rocks: usize) -> usize {
     let jet_streams = parse_input(input);
+    println!("Num stream inputs: {}", jet_streams.len());
 
-    let board = simulate(&jet_streams, 2022);
+    let mut highest_level = 0;
+    let board = simulate(&jet_streams, &mut highest_level, 2022);
 
-    highest_level(&board)
+    highest_level
 }
 
-fn simulate(jet_streams: &Vec<i64>, num_rocks: usize) -> Vec<Vec<u8>> {    
-    let mut board = vec![vec![0u8;7];8000];
+fn simulate(jet_streams: &Vec<i64>, highest_level: &mut usize, num_rocks: usize) -> Vec<Vec<u8>> {    
+    let mut board = vec![vec![0u8;7];800000000];
     let mut stream_idx = 0;
-    for i in 0..num_rocks {
-        stream_idx = drop_rock(&mut board, 
-            i % get_rock_types().len(), 
-            jet_streams, 
-            stream_idx);
+    let mut rock_count = 0;
+    let mut iterations = 1;
+    loop {
+        while stream_idx < jet_streams.len() * iterations {
+        // for i in 0..num_rocks {
+            stream_idx = drop_rock(&mut board,
+                highest_level, 
+                rock_count % get_rock_types().len(), 
+                jet_streams, 
+                stream_idx);
+            rock_count += 1;
+        }
+        iterations += 1;
+        
+        println!("Rocks dropped {rock_count}; Stream consumed {stream_idx}");
+        if (stream_idx % jet_streams.len() == 0) && (rock_count % 5 == 0) {
+            println!("Found repeat");
+            break;
+        }
     }
-
     board
 }
 
@@ -56,33 +71,33 @@ fn test_sample_input() {
     assert_eq!(3068, answer);
 }
 
-fn highest_level(board: &Vec<Vec<u8>>) -> usize {
-    match board.iter().position(|row| {
-            row.iter().find(|cell| {
-                **cell!=0
-            } ).is_none()
-        }) {
-            Some(row_idx) => row_idx,
-            None => { panic!(); }
-        }
-}
+// fn highest_level(board: &Vec<Vec<u8>>) -> usize {
+//     match board.iter().position(|row| {
+//             row.iter().find(|cell| {
+//                 **cell!=0
+//             } ).is_none()
+//         }) {
+//             Some(row_idx) => row_idx,
+//             None => { panic!(); }
+//         }
+// }
 
-#[test]
-fn test_highest_level() {
-    let mut board = vec![vec![0u8;7];3000];
-    assert_eq!(0,highest_level(&board));
-    for i in 0..11 {
-        board[i][3] = 1u8;
-    }
-    assert_eq!(11,highest_level(&board));
-}
+// #[test]
+// fn test_highest_level() {
+//     let mut board = vec![vec![0u8;7];3000];
+//     assert_eq!(0,highest_level(&board));
+//     for i in 0..11 {
+//         board[i][3] = 1u8;
+//     }
+//     assert_eq!(11,highest_level(&board));
+// }
 
 // returns the position in the jet_stream
-fn drop_rock(board: &mut Vec<Vec<u8>>, rock_type: usize, jet_streams: &[i64], mut jet_stream_idx: usize) -> usize {
+fn drop_rock(board: &mut Vec<Vec<u8>>, highest_level: &mut usize, rock_type: usize, jet_streams: &[i64], mut jet_stream_idx: usize) -> usize {
     let rock = get_rock_types()[rock_type].clone();
     let mut rock_x = 2i64;
     // frex, highest level is row[0], rock is 1-3, +2 makes for 3 for flattie, 5 for square, (0-indexed means 3 empty rows between)
-    let mut rock_y = (highest_level(board)+rock.len()+2) as i64;  // origin is top left
+    let mut rock_y = (*highest_level+rock.len()+2) as i64;  // origin is top left
     let mut collision = false;
     while !collision {
         // sideways
@@ -133,6 +148,7 @@ fn drop_rock(board: &mut Vec<Vec<u8>>, rock_type: usize, jet_streams: &[i64], mu
     // and place permanently
     for (y,row) in rock.iter().enumerate() {
         for (x, pixel) in row.iter().enumerate() {
+            *highest_level = std::cmp::max(*highest_level, rock_y as usize-y);
             board[rock_y as usize-y][rock_x as usize+x] |= rock[y][x];  // frex, rock_y -> 3 ; rock row 0 goes on 3, rock row 1 goes on 2, rock row 2 goes on 1
         }
     }
@@ -144,18 +160,19 @@ fn drop_rock(board: &mut Vec<Vec<u8>>, rock_type: usize, jet_streams: &[i64], mu
 fn test_drop_rocks_no_stream() {
     let mut board = vec![vec![0u8;7];3000];
     let stream = vec![0;3000];
-    let jet_stream_idx = drop_rock(&mut board, 0, &stream, 0);
+    let mut highest_level = 0;
+    let jet_stream_idx = drop_rock(&mut board, &mut highest_level, 0, &stream, 0);
     assert_eq!(4, jet_stream_idx);
     assert_eq!(vec![0,0,1,1,1,1,0],board[0]);
     assert_eq!(vec![0,0,0,0,0,0,0],board[1]);
-    let jet_stream_idx = drop_rock(&mut board, 1, &stream, jet_stream_idx);
+    let jet_stream_idx = drop_rock(&mut board, &mut highest_level, 1, &stream, jet_stream_idx);
     assert_eq!(8, jet_stream_idx);
     assert_eq!(vec![0,0,1,1,1,1,0],board[0]);
     assert_eq!(vec![0,0,0,1,0,0,0],board[1]);
     assert_eq!(vec![0,0,1,1,1,0,0],board[2]);
     assert_eq!(vec![0,0,0,1,0,0,0],board[3]);
     assert_eq!(vec![0,0,0,0,0,0,0],board[4]);
-    let jet_stream_idx = drop_rock(&mut board, 2, &stream, jet_stream_idx);
+    let jet_stream_idx = drop_rock(&mut board, &mut highest_level, 2, &stream, jet_stream_idx);
     assert_eq!(12, jet_stream_idx);
     assert_eq!(vec![0,0,1,1,1,1,0],board[0]);
     assert_eq!(vec![0,0,0,1,0,0,0],board[1]);
@@ -165,7 +182,7 @@ fn test_drop_rocks_no_stream() {
     assert_eq!(vec![0,0,0,0,1,0,0],board[5]);
     assert_eq!(vec![0,0,0,0,1,0,0],board[6]);
     assert_eq!(vec![0,0,0,0,0,0,0],board[7]);
-    let jet_stream_idx = drop_rock(&mut board, 3, &stream, jet_stream_idx);
+    let jet_stream_idx = drop_rock(&mut board, &mut highest_level, 3, &stream, jet_stream_idx);
     assert_eq!(18, jet_stream_idx);  // this one travelled extra two spaces, conumsed 4+2 streams
     assert_eq!(vec![0,0,1,1,1,1,0],board[0]);
     assert_eq!(vec![0,0,0,1,0,0,0],board[1]);
@@ -177,7 +194,7 @@ fn test_drop_rocks_no_stream() {
     assert_eq!(vec![0,0,1,0,0,0,0],board[7]);
     assert_eq!(vec![0,0,1,0,0,0,0],board[8]);
     assert_eq!(vec![0,0,0,0,0,0,0],board[9]);
-    let jet_stream_idx = drop_rock(&mut board, 4, &stream, jet_stream_idx);
+    let jet_stream_idx = drop_rock(&mut board, &mut highest_level, 4, &stream, jet_stream_idx);
     assert_eq!(22, jet_stream_idx);
     assert_eq!(vec![0,0,1,1,1,1,0],board[0]);
     assert_eq!(vec![0,0,0,1,0,0,0],board[1]);
@@ -194,56 +211,56 @@ fn test_drop_rocks_no_stream() {
 }
 
 #[test]
-fn test_drop_rocks_left_stream() {
-    let mut board = vec![vec![0u8;7];3000];
-    let stream = vec![-1;3000];
-    let jet_stream_idx = drop_rock(&mut board, 0, &stream, 0);
-    assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
-    assert_eq!(vec![0,0,0,0,0,0,0],board[1]);
-    assert_eq!(4, jet_stream_idx);
-    let jet_stream_idx = drop_rock(&mut board, 1, &stream, jet_stream_idx);
-    assert_eq!(8, jet_stream_idx);
-    assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
-    assert_eq!(vec![0,1,0,0,0,0,0],board[1]);
-    assert_eq!(vec![1,1,1,0,0,0,0],board[2]);
-    assert_eq!(vec![0,1,0,0,0,0,0],board[3]);
-    assert_eq!(vec![0,0,0,0,0,0,0],board[4]);
-    let jet_stream_idx = drop_rock(&mut board, 2, &stream, jet_stream_idx);
-    assert_eq!(12, jet_stream_idx);
-    assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
-    assert_eq!(vec![0,1,0,0,0,0,0],board[1]);
-    assert_eq!(vec![1,1,1,0,0,0,0],board[2]);
-    assert_eq!(vec![0,1,0,0,0,0,0],board[3]);
-    assert_eq!(vec![1,1,1,0,0,0,0],board[4]);
-    assert_eq!(vec![0,0,1,0,0,0,0],board[5]);
-    assert_eq!(vec![0,0,1,0,0,0,0],board[6]);
-    assert_eq!(vec![0,0,0,0,0,0,0],board[7]);
-    let jet_stream_idx = drop_rock(&mut board, 3, &stream, jet_stream_idx);
-    assert_eq!(18, jet_stream_idx);  // this one travelled extra two spaces, conumsed 4+2 streams
-    assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
-    assert_eq!(vec![0,1,0,0,0,0,0],board[1]);
-    assert_eq!(vec![1,1,1,0,0,0,0],board[2]);
-    assert_eq!(vec![0,1,0,0,0,0,0],board[3]);
-    assert_eq!(vec![1,1,1,0,0,0,0],board[4]);
-    assert_eq!(vec![1,0,1,0,0,0,0],board[5]);
-    assert_eq!(vec![1,0,1,0,0,0,0],board[6]);    
-    assert_eq!(vec![1,0,0,0,0,0,0],board[7]);
-    assert_eq!(vec![1,0,0,0,0,0,0],board[8]);
-    assert_eq!(vec![0,0,0,0,0,0,0],board[9]);
-    let jet_stream_idx = drop_rock(&mut board, 4, &stream, jet_stream_idx);
-    assert_eq!(22, jet_stream_idx);
-    assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
-    assert_eq!(vec![0,1,0,0,0,0,0],board[1]);
-    assert_eq!(vec![1,1,1,0,0,0,0],board[2]);
-    assert_eq!(vec![0,1,0,0,0,0,0],board[3]);
-    assert_eq!(vec![1,1,1,0,0,0,0],board[4]);
-    assert_eq!(vec![1,0,1,0,0,0,0],board[5]);
-    assert_eq!(vec![1,0,1,0,0,0,0],board[6]);    
-    assert_eq!(vec![1,0,0,0,0,0,0],board[7]);
-    assert_eq!(vec![1,0,0,0,0,0,0],board[8]);
-    assert_eq!(vec![1,1,0,0,0,0,0],board[9]);
-    assert_eq!(vec![1,1,0,0,0,0,0],board[10]);
-}
+// fn test_drop_rocks_left_stream() {
+//     let mut board = vec![vec![0u8;7];3000];
+//     let stream = vec![-1;3000];
+//     let jet_stream_idx = drop_rock(&mut board, 0, &stream, 0);
+//     assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
+//     assert_eq!(vec![0,0,0,0,0,0,0],board[1]);
+//     assert_eq!(4, jet_stream_idx);
+//     let jet_stream_idx = drop_rock(&mut board, 1, &stream, jet_stream_idx);
+//     assert_eq!(8, jet_stream_idx);
+//     assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
+//     assert_eq!(vec![0,1,0,0,0,0,0],board[1]);
+//     assert_eq!(vec![1,1,1,0,0,0,0],board[2]);
+//     assert_eq!(vec![0,1,0,0,0,0,0],board[3]);
+//     assert_eq!(vec![0,0,0,0,0,0,0],board[4]);
+//     let jet_stream_idx = drop_rock(&mut board, 2, &stream, jet_stream_idx);
+//     assert_eq!(12, jet_stream_idx);
+//     assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
+//     assert_eq!(vec![0,1,0,0,0,0,0],board[1]);
+//     assert_eq!(vec![1,1,1,0,0,0,0],board[2]);
+//     assert_eq!(vec![0,1,0,0,0,0,0],board[3]);
+//     assert_eq!(vec![1,1,1,0,0,0,0],board[4]);
+//     assert_eq!(vec![0,0,1,0,0,0,0],board[5]);
+//     assert_eq!(vec![0,0,1,0,0,0,0],board[6]);
+//     assert_eq!(vec![0,0,0,0,0,0,0],board[7]);
+//     let jet_stream_idx = drop_rock(&mut board, 3, &stream, jet_stream_idx);
+//     assert_eq!(18, jet_stream_idx);  // this one travelled extra two spaces, conumsed 4+2 streams
+//     assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
+//     assert_eq!(vec![0,1,0,0,0,0,0],board[1]);
+//     assert_eq!(vec![1,1,1,0,0,0,0],board[2]);
+//     assert_eq!(vec![0,1,0,0,0,0,0],board[3]);
+//     assert_eq!(vec![1,1,1,0,0,0,0],board[4]);
+//     assert_eq!(vec![1,0,1,0,0,0,0],board[5]);
+//     assert_eq!(vec![1,0,1,0,0,0,0],board[6]);    
+//     assert_eq!(vec![1,0,0,0,0,0,0],board[7]);
+//     assert_eq!(vec![1,0,0,0,0,0,0],board[8]);
+//     assert_eq!(vec![0,0,0,0,0,0,0],board[9]);
+//     let jet_stream_idx = drop_rock(&mut board, 4, &stream, jet_stream_idx);
+//     assert_eq!(22, jet_stream_idx);
+//     assert_eq!(vec![1,1,1,1,0,0,0],board[0]);
+//     assert_eq!(vec![0,1,0,0,0,0,0],board[1]);
+//     assert_eq!(vec![1,1,1,0,0,0,0],board[2]);
+//     assert_eq!(vec![0,1,0,0,0,0,0],board[3]);
+//     assert_eq!(vec![1,1,1,0,0,0,0],board[4]);
+//     assert_eq!(vec![1,0,1,0,0,0,0],board[5]);
+//     assert_eq!(vec![1,0,1,0,0,0,0],board[6]);    
+//     assert_eq!(vec![1,0,0,0,0,0,0],board[7]);
+//     assert_eq!(vec![1,0,0,0,0,0,0],board[8]);
+//     assert_eq!(vec![1,1,0,0,0,0,0],board[9]);
+//     assert_eq!(vec![1,1,0,0,0,0,0],board[10]);
+// }
 
 #[test]
 fn test_first_few_sample_rocks() {
@@ -269,7 +286,8 @@ fn test_first_few_sample_rocks() {
         line.split_at(8).0.split_at(1).1.chars().map(|char| if char=='#' {1} else {0}).collect()}).collect();
     print!("{:?}", expected_board);
     let jet_streams = parse_input(get_sample_input());
-    let actual_board = simulate(&jet_streams, 10);
+    let mut highest_level = 0;
+    let actual_board = simulate(&jet_streams, &mut highest_level, 10);
     let mut idx = 0;
     for row in expected_board {
         println!("{idx}");

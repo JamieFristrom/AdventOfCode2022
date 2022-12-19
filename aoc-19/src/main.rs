@@ -13,7 +13,7 @@ enum Resource {
 
 type Vec4d = [i32;4];
 
-fn affordable(cost: &Vec<i32>, resources: &Vec4d) -> bool {
+fn affordable(cost: &Vec4d, resources: &Vec4d) -> bool {
     for i in 0..cost.len() {
         if cost[i] > resources[i] { return false;}
     }
@@ -21,19 +21,19 @@ fn affordable(cost: &Vec<i32>, resources: &Vec4d) -> bool {
     true
 }
 
-fn resources_add(r1: &Vec4d, r2: &Vec4d) -> Vec<i32> {
-    let mut remainder = vec![];
+fn v4add(r1: &Vec4d, r2: &Vec4d) -> Vec4d {
+    let mut remainder = [0,0,0,0];
     for i in 0..r1.len() {
-        remainder.push(r1[i]+r2[i]);
+        remainder[i] = r1[i]+r2[i];
     }
 
     remainder
 }
 
-fn resources_sub(cost: &Vec4d, resources: &Vec4d) -> Vec<i32> {
-    let mut remainder = vec![];
+fn v4sub(cost: &Vec4d, resources: &Vec4d) -> Vec4d {
+    let mut remainder = [0,0,0,0];
     for i in 0..cost.len() {
-        remainder.push(resources[i]-cost[i]);
+        remainder[i] = resources[i]-cost[i];
     }
 
     remainder
@@ -43,7 +43,7 @@ fn get_elements_for_robot_idx() -> &'static [Vec4d;4] {
     &[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]
 }
 
-fn best_plan(answer_space: &mut HashMap<(Vec4d,Vec4d,i32),i32>, factory: &Vec<Vec<i32>>, resources: &Vec4d, robots: &Vec4d, turns_left: i32) -> i32 {
+fn best_plan(answer_space: &mut HashMap<(Vec4d,Vec4d,i32),i32>, factory: &Vec<Vec4d>, resources: &Vec4d, robots: &Vec4d, turns_left: i32) -> i32 {
     match answer_space.get(&(*resources,*robots,turns_left)) {
         Some(cached_answer) => { return *cached_answer; }
         _ => {
@@ -52,11 +52,11 @@ fn best_plan(answer_space: &mut HashMap<(Vec4d,Vec4d,i32),i32>, factory: &Vec<Ve
                 computed_answer = resources[3]; 
             }
             else {
-                let new_resources = resources_add( resources, &robots ); 
+                let new_resources = v4add( resources, &robots ); 
                 for (i, robot_choice) in factory.iter().enumerate() {
-                    if affordable(robot_choice, resources) {
-                        let remainder = resources_sub(robot_choice, &new_resources);
-                        let new_robots = resources_add(robots, &get_elements_for_robot_idx()[i]);
+                    if affordable(&robot_choice, resources) {
+                        let remainder = v4sub(robot_choice, &new_resources);
+                        let new_robots = v4add(robots, &get_elements_for_robot_idx()[i]);
                         let this_choice = best_plan( answer_space, &factory, &remainder, &new_robots, turns_left-1);
                         computed_answer = std::cmp::max(computed_answer, this_choice);
                     }
@@ -78,22 +78,23 @@ fn best_plan(answer_space: &mut HashMap<(Vec4d,Vec4d,i32),i32>, factory: &Vec<Ve
 #[test]
 fn test_best_plan() {
     println!("Hello?");
-    let factory = vec![vec![4,0,0,0],vec![2,0,0,0],vec![3,14,0,0],vec![2,0,7,0]];
-    let mut answer_space = HashMap::<(Vec<i32>,Vec<i32>,i32),i32>::new();
-    let answer = best_plan(&mut answer_space, &factory, &vec![5,37,6,7], &vec![1,4,2,2], 1);
+    let factory = vec![[4,0,0,0],[2,0,0,0],[3,14,0,0],[2,0,7,0]];
+    let mut answer_space = HashMap::<(Vec4d,Vec4d,i32),i32>::new();
+    let answer = best_plan(&mut answer_space, &factory, &[5,37,6,7], &[1,4,2,2], 1);
     assert_eq!(9, answer);    
-    let answer = best_plan(&mut answer_space, &factory, &vec![4,33,4,5], &vec![1,4,2,2], 2);
+    let answer = best_plan(&mut answer_space, &factory, &[4,33,4,5], &[1,4,2,2], 2);
     assert_eq!(9, answer);        
-    let answer = best_plan(&mut answer_space, &factory, &vec![3,29,2,3], &vec![1,4,2,2], 3);
+    let answer = best_plan(&mut answer_space, &factory, &[3,29,2,3], &[1,4,2,2], 3);
     assert_eq!(9, answer); 
-    let answer = best_plan(&mut answer_space, &factory, &vec![4,25,7,2], &vec![1,4,2,1], 4);
+    let answer = best_plan(&mut answer_space, &factory, &[4,25,7,2], &[1,4,2,1], 4);
     assert_eq!(9, answer); 
-    let answer = best_plan(&mut answer_space, &factory, &vec![0,0,0,0], &vec![1,0,0,0], 24);
+    let answer = best_plan(&mut answer_space, &factory, &[0,0,0,0], &[1,0,0,0], 24);
+    assert_eq!(9, answer); 
 }
 
-fn parse_input(input: &str) {
-    for 
-}
+// fn parse_input(input: &str) {
+//     for 
+// }
 
 fn get_sample_input() -> &'static str {
 "Blueprint 1: Each ore robot costs 4 ore. Each clay robot costs 2 ore. Each obsidian robot costs 3 ore and 14 clay. Each geode robot costs 2 ore and 7 obsidian.
