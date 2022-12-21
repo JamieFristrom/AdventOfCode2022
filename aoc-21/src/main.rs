@@ -3,14 +3,51 @@ use scanf::sscanf;
 
 fn main() {
     println!("Hello, world!");
-    let monkeys = parse_input(get_puzzle_input());
-    let answer = simulate(&monkeys, &"root".to_string());
-    println!("boom? {answer}");
+    let mut monkeys = parse_input(get_puzzle_input());
+    let root_monkey = monkeys["root"].clone();
+
+    match root_monkey {
+        Monkey::YellResult( monkey1, monkey2, _) => {
+            let mut lowbound: Number = i64::MIN as Number;
+            let mut highbound: Number = i64::MAX as Number;
+            let mut midbound: Number = 0;
+            loop {
+                midbound = (lowbound + highbound)/2;
+                println!("lowbound {}, highbound {}, midbound {}", lowbound, highbound, midbound);
+                
+                monkeys.insert("humn".to_string(), Monkey::YellNumber(lowbound as Number));
+                let low = simulate(&monkeys, &monkey1);
+                
+                monkeys.insert("humn".to_string(), Monkey::YellNumber(highbound as Number));
+                let high = simulate(&monkeys, &monkey1);
+
+                monkeys.insert("humn".to_string(), Monkey::YellNumber(midbound as Number));
+                let mid = simulate(&monkeys, &monkey1);
+
+                let right = simulate(&monkeys, &monkey2);
+                println!("target: {right} - low {low}, high {high}, mid {mid}");
+                assert!(low > right);
+                assert!(high < right);
+                if mid == right {
+                    println!("boom? {midbound}");
+                    break;
+                }
+                else if mid > right {
+                    lowbound = midbound;
+                }
+                else { 
+                    highbound = midbound;                    
+                }
+            }
+        }
+        _ => { panic!(); }
+    }
+
 }
 
 type MonkeyId = String;
 
-#[derive(PartialEq,Debug)]
+#[derive(Clone,PartialEq,Debug)]
 enum Operation {
     Add,
     Subtract,
@@ -20,7 +57,7 @@ enum Operation {
 
 type Number = i128;
 
-#[derive(PartialEq,Debug)]
+#[derive(Clone,PartialEq,Debug)]
 enum Monkey {
     YellNumber(Number),
     YellResult(MonkeyId,MonkeyId,Operation),
