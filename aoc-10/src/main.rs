@@ -1,4 +1,23 @@
 fn main() {
+    let mut output = vec![vec!['.';40];6];
+    for row in 0..6 {
+        for cycle in 0..40 {
+            let signal_strength = x_register(&get_puzzle_input(), row*40+cycle+1);
+            if cycle>=signal_strength-1 && cycle<=signal_strength+1 {
+                output[row as usize][cycle as usize] = '#';
+            }
+        }
+    }
+    for row in output {
+        for pixel in row {
+            print!("{}", pixel);
+        }
+        println!();
+    }
+}
+
+#[test]
+fn test_puzzle_data() {
     let puzzle_input = get_puzzle_input();
     let answer
         = signal_strength(&puzzle_input, 20) 
@@ -11,6 +30,10 @@ fn main() {
 }
 
 fn signal_strength(input: &str, cycle: i64) -> i64 {
+    x_register(input, cycle)*cycle
+}
+
+fn x_register(input: &str, cycle: i64) -> i64 {
     let mut tick = 0;
     let mut x: i64 = 1;
     let mut lines = input.lines();
@@ -36,12 +59,22 @@ fn signal_strength(input: &str, cycle: i64) -> i64 {
             }
         }
     }
-    x * cycle
+    x
 }
 
 #[test]
 fn test_signal_strength() {
-    let input = 
+    let input = get_sample_input();
+
+    assert_eq!(420, signal_strength(&input, 20));
+    assert_eq!(1140, signal_strength(&input, 60));
+    assert_eq!(1800, signal_strength(&input, 100));
+    assert_eq!(2940, signal_strength(&input, 140));
+    assert_eq!(2880, signal_strength(&input, 180));
+    assert_eq!(3960, signal_strength(&input, 220));
+}
+
+fn get_sample_input() -> &'static str {
 "addx 15
 addx -11
 addx 6
@@ -187,13 +220,7 @@ addx -6
 addx -11
 noop
 noop
-noop";
-    assert_eq!(420, signal_strength(&input, 20));
-    assert_eq!(1140, signal_strength(&input, 60));
-    assert_eq!(1800, signal_strength(&input, 100));
-    assert_eq!(2940, signal_strength(&input, 140));
-    assert_eq!(2880, signal_strength(&input, 180));
-    assert_eq!(3960, signal_strength(&input, 220));
+noop"
 }
 
 fn get_puzzle_input() -> &'static str {
