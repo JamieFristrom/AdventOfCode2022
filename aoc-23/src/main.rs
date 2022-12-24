@@ -1,7 +1,9 @@
+use std::ops::Range;
+
 fn main() {
     println!("Hello, world!");
     let mut elves = parse_input(&get_puzzle_input());
-    let answer = simulate(&mut elves);
+    let (_, answer) = simulate(&mut elves, i32::MAX);
     println!("boom? {answer}");
 
 }
@@ -21,10 +23,15 @@ fn parse_input(input: &str) -> Vec<(i32,i32)> {
 }
 
 
-fn simulate(elves: &mut Vec<(i32,i32)>) -> i32 {
+fn simulate(elves: &mut Vec<(i32,i32)>, rounds: i32) -> (i32, i32) {
     let mut next_dir = 0;
-    for _ in 0..10 {
-        (_, next_dir) = simulate_round(elves, next_dir);
+    let mut round = 0;
+    for _ in 0..rounds {
+        round += 1;
+        println!("round {round}");
+        let mut done = false;
+        (done, next_dir) = simulate_round(elves, next_dir);
+        if done { break; }
     }
     let left = elves.iter().min_by_key(|elf| elf.0).unwrap().0;
     let right = elves.iter().max_by_key(|elf| elf.0).unwrap().0;
@@ -32,13 +39,20 @@ fn simulate(elves: &mut Vec<(i32,i32)>) -> i32 {
     let bottom = elves.iter().max_by_key(|elf| elf.1).unwrap().1;
     let square_area = (right-left+1) * (bottom-top+1);
 
-    square_area - elves.len() as i32
+    (square_area - elves.len() as i32, round)
 }
 
 #[test]
-fn test_simulate() {
+fn test_simulate_10_rounds() {
     let mut elves = parse_input(&get_sample_input());
-    assert_eq!(110, simulate(&mut elves));
+    assert!(simulate(&mut elves, 10).0==110);
+}
+
+#[test]
+fn test_simulate_until_done() {
+    let mut elves = parse_input(&get_sample_input());
+    let answer = simulate(&mut elves, i32::MAX).1;
+    assert_eq!(20, answer);
 }
 
 fn simulate_round(elves: &mut Vec<(i32,i32)>, first_dir: i32 ) -> (bool, i32) {
@@ -96,27 +110,32 @@ fn simulate_round(elves: &mut Vec<(i32,i32)>, first_dir: i32 ) -> (bool, i32) {
         }
     }
     
+    let mut done = true;
+
     // After each Elf has had a chance to propose a move, the second half of the round can begin. 
     for (i, proposal) in proposals.iter().enumerate() {
         // Simultaneously, each Elf moves to their proposed destination tile if they were the only Elf to propose moving to that position. 
         // If two or more Elves propose moving to the same position, none of those Elves move.
         if proposals.iter().filter(|p| *p==proposal).count()==1 {
-            elves[i] = *proposal;
+            if *proposal != elves[i] {
+                elves[i] = *proposal;
+                done = false;
+            }
         }
     }
     
     // Finally, at the end of the round, the first direction the Elves considered is moved to the end of the list of directions.
-    (false, (first_dir+1)%4)
+    (done, (first_dir+1)%4)
 }
 
-// #[test]
-// fn test_simulate_round_done() {
-//     let mut elves = vec![(0,0), (2,0),(0,2),(2,2)];
-//     let (done, new_dir) = simulate_round(&mut elves, 3);
-//     assert!(done);
-//     assert_eq!(0, new_dir);
-//     assert_eq!(vec![(0,0), (2,0),(0,2),(2,2)], elves);
-// }
+#[test]
+fn test_simulate_round_done() {
+    let mut elves = vec![(0,0), (2,0),(0,2),(2,2)];
+    let (done, new_dir) = simulate_round(&mut elves, 3);
+    assert!(done);
+    assert_eq!(0, new_dir);
+    assert_eq!(vec![(0,0), (2,0),(0,2),(2,2)], elves);
+}
 
 #[test]
 fn test_simulate_round() {
